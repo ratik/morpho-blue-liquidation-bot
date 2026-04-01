@@ -21,6 +21,7 @@ import type { LiquidityVenue } from "../liquidityVenue";
 import type { ToConvert } from "../types";
 
 export class UniswapV3Venue implements LiquidityVenue {
+  kind = "swap" as const;
   private pools: Record<Address, Record<Address, Address[]>> = {};
 
   async supportsRoute(encoder: ExecutorEncoder, src: Address, dst: Address) {

@@ -9,8 +9,11 @@ import { ToConvert } from "../types";
 import { SwapRouteV2Response } from "./types";
 
 export class LiquidSwapVenue implements LiquidityVenue {
+  kind = "swap" as const;
   private assetsDecimals: Record<number, Record<Address, number>> = {};
   private baseApiUrl = "https://api.liqd.ag/v2/route";
+  private quoteCacheTtlMs = 5_000;
+  private quoteCache = new Map<string, { response: SwapRouteV2Response; timestamp: number }>();
 
   supportsRoute(encoder: ExecutorEncoder, src: Address, dst: Address) {
     if (src === dst) return false;
@@ -24,9 +27,13 @@ export class LiquidSwapVenue implements LiquidityVenue {
     try {
       const srcDecimals = await this.getAssetsDecimals(encoder.client, src);
 
-      const url = this.apiUrl(src, dst, Math.floor(Number(srcAmount) / 10 ** srcDecimals));
-      const response = await fetch(url);
-      const data = (await response.json()) as SwapRouteV2Response;
+      const amountIn = Math.floor(Number(srcAmount) / 10 ** srcDecimals);
+      const cacheKey = `${encoder.client.chain.id}:${src}:${dst}:${amountIn}`;
+      const cached = this.quoteCache.get(cacheKey);
+      const data =
+        cached && Date.now() - cached.timestamp < this.quoteCacheTtlMs
+          ? cached.response
+          : await this.fetchRoute(cacheKey, src, dst, amountIn);
 
       if (!data.success || !data.execution) {
         throw new Error("failed to fetch liquid swap route");
@@ -48,6 +55,14 @@ export class LiquidSwapVenue implements LiquidityVenue {
 
   private apiUrl(src: Address, dst: Address, amount: number) {
     return `${this.baseApiUrl}?tokenIn=${src}&tokenOut=${dst}&amountIn=${amount}`;
+  }
+
+  private async fetchRoute(cacheKey: string, src: Address, dst: Address, amount: number) {
+    const url = this.apiUrl(src, dst, amount);
+    const response = await fetch(url);
+    const data = (await response.json()) as SwapRouteV2Response;
+    this.quoteCache.set(cacheKey, { response: data, timestamp: Date.now() });
+    return data;
   }
 
   private async getAssetsDecimals(client: Client<Transport, Chain, Account>, asset: Address) {

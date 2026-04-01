@@ -13,6 +13,7 @@ import { PreviewRedeemInstantParams } from "./types";
 const ONE_HUNDRED_PERCENT = 100n * 100n;
 
 export class MidasVenue implements LiquidityVenue {
+  kind = "transform" as const;
   supportsRoute(encoder: ExecutorEncoder, src: Address, dst: Address) {
     if (src === dst) return false;
 

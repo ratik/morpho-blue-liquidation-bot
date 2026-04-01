@@ -306,19 +306,70 @@ export class LiquidationBot {
       srcAmount: seizableCollateral,
     };
 
-    for (const venue of this.liquidityVenues) {
-      try {
-        if (await venue.supportsRoute(encoder, toConvert.src, toConvert.dst))
-          toConvert = await venue.convert(encoder, toConvert);
-      } catch (error) {
-        console.error(`${this.logTag}Error converting ${toConvert.src} to ${toConvert.dst}`, error);
-        continue;
-      }
+    toConvert = await this.applyTransformVenues(encoder, toConvert);
+    if (toConvert.src === toConvert.dst) return true;
 
-      if (toConvert.src === toConvert.dst) return true;
-    }
+    toConvert = await this.applySwapVenues(encoder, toConvert);
+    if (toConvert.src === toConvert.dst) return true;
 
     return false;
+  }
+
+  private async applyTransformVenues(
+    encoder: LiquidationEncoder,
+    initialToConvert: { src: Address; dst: Address; srcAmount: bigint },
+  ) {
+    let toConvert = initialToConvert;
+    let iteration = 0;
+
+    while (toConvert.src !== toConvert.dst && iteration < this.liquidityVenues.length) {
+      let transformed = false;
+
+      for (const venue of this.liquidityVenues) {
+        if (venue.kind !== "transform") continue;
+        try {
+          if (!(await venue.supportsRoute(encoder, toConvert.src, toConvert.dst))) continue;
+
+          const nextToConvert = await venue.convert(encoder, toConvert);
+          if (nextToConvert.src === toConvert.src) continue;
+
+          toConvert = nextToConvert;
+          transformed = true;
+          break;
+        } catch (error) {
+          console.error(
+            `${this.logTag}Error converting ${toConvert.src} to ${toConvert.dst}`,
+            error,
+          );
+        }
+      }
+
+      if (!transformed) break;
+      iteration++;
+    }
+
+    return toConvert;
+  }
+
+  private async applySwapVenues(
+    encoder: LiquidationEncoder,
+    initialToConvert: { src: Address; dst: Address; srcAmount: bigint },
+  ) {
+    let toConvert = initialToConvert;
+
+    for (const venue of this.liquidityVenues) {
+      if (venue.kind !== "swap") continue;
+      try {
+        if (!(await venue.supportsRoute(encoder, toConvert.src, toConvert.dst))) continue;
+
+        toConvert = await venue.convert(encoder, toConvert);
+        if (toConvert.src === toConvert.dst) return toConvert;
+      } catch (error) {
+        console.error(`${this.logTag}Error converting ${toConvert.src} to ${toConvert.dst}`, error);
+      }
+    }
+
+    return toConvert;
   }
 
   private async price(asset: Address, amount: bigint, pricers: Pricer[]) {

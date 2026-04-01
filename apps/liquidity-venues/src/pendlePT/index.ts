@@ -68,6 +68,7 @@ async function getRedeemCallData(chainId: number, params: RedeemParams) {
 }
 
 export class PendlePTVenue implements LiquidityVenue {
+  kind = "transform" as const;
   private pendleMarkets: Record<number, PendleMarketsResponse | undefined> = {};
   private lastPoolRefresh: Record<number, number | undefined> = {};
 

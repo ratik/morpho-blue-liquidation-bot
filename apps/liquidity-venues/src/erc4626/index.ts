@@ -6,6 +6,7 @@ import type { LiquidityVenue } from "../liquidityVenue";
 import type { ToConvert } from "../types";
 
 export class Erc4626 implements LiquidityVenue {
+  kind = "transform" as const;
   private underlying: Record<Address, Address> = {};
 
   async supportsRoute(encoder: ExecutorEncoder, src: Address, dst: Address) {

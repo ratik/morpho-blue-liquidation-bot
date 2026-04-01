@@ -25,6 +25,7 @@ import type { LiquidityVenue } from "../liquidityVenue";
 import type { ToConvert } from "../types";
 
 export class UniswapV4Venue implements LiquidityVenue {
+  kind = "swap" as const;
   private STALE_TIME = 60 * 60 * 1000; // 1 hour
   private poolCreationEventsCache: Record<
     Hex,

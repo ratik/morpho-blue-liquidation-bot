@@ -9,7 +9,10 @@ import { ToConvert } from "../types";
 import { SwapParams, SwapResponse } from "./types";
 
 export class OneInch implements LiquidityVenue {
+  kind = "swap" as const;
+  private readonly quoteCacheTtlMs = 5_000;
   private apiKey: string | undefined;
+  private quoteCache = new Map<string, { response: SwapResponse; timestamp: number }>();
 
   constructor() {
     this.apiKey = process.env.ONE_INCH_SWAP_API_KEY;
@@ -59,6 +62,17 @@ export class OneInch implements LiquidityVenue {
   private getSwapApiPath = (chainId: BigIntish) => `/swap/v6.1/${chainId}/swap`;
 
   private async fetchSwap(swapParams: SwapParams) {
+    const cacheKey = [
+      swapParams.chainId,
+      swapParams.src,
+      swapParams.dst,
+      swapParams.amount.toString(),
+    ].join(":");
+    const cached = this.quoteCache.get(cacheKey);
+    if (cached && Date.now() - cached.timestamp < this.quoteCacheTtlMs) {
+      return cached.response;
+    }
+
     const url = new URL(this.getSwapApiPath(swapParams.chainId), API_BASE_URL);
     Object.entries(swapParams).forEach(([key, value]) => {
       if (value == null || key === "chainId") return;
@@ -81,6 +95,8 @@ export class OneInch implements LiquidityVenue {
 
     if (!res.ok) throw Error(res.statusText);
 
-    return (await res.json()) as SwapResponse;
+    const response = (await res.json()) as SwapResponse;
+    this.quoteCache.set(cacheKey, { response, timestamp: Date.now() });
+    return response;
   }
 }
