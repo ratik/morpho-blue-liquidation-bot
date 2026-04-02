@@ -8,10 +8,23 @@ export interface AppLogger {
   child: (bindings: Record<string, unknown>) => AppLogger;
 }
 
+const useJsonLogs = process.env.LOG_FORMAT === "json";
 const rootLogger = pino({
   level: process.env.LOG_LEVEL ?? "info",
   base: undefined,
   timestamp: pino.stdTimeFunctions.isoTime,
+  ...(useJsonLogs
+    ? {}
+    : {
+        transport: {
+          target: "pino-pretty",
+          options: {
+            colorize: process.stdout.isTTY,
+            translateTime: "SYS:standard",
+            ignore: "pid,hostname",
+          },
+        },
+      }),
 }) as AppLogger;
 
 export const logger = rootLogger;
