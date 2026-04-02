@@ -1,6 +1,9 @@
 import type { Account, Address, Chain, Client, Transport } from "viem";
 
+import { createLogger, serializeError } from "../logger";
 import type { Pricer } from "../pricer";
+
+const logger = createLogger({ component: "morpho-api-pricer" });
 
 export class MorphoApi implements Pricer {
   private readonly API_URL = "https://blue-api.morpho.org/graphql";
@@ -31,7 +34,10 @@ export class MorphoApi implements Pricer {
 
       return priceUsd ?? undefined;
     } catch (error) {
-      console.error(error);
+      logger.error(
+        { error: serializeError(error), asset, chainId: client.chain.id },
+        "Error fetching Morpho API price",
+      );
       return undefined;
     }
   }
@@ -56,7 +62,7 @@ export class MorphoApi implements Pricer {
       this.supportedChains = data.data.chains.map((chain) => chain.id);
       this.initialized = true;
     } catch (error) {
-      console.error(error);
+      logger.error({ error: serializeError(error) }, "Error initializing Morpho API pricer");
     }
   }
 

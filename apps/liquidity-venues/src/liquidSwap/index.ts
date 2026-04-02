@@ -4,9 +4,12 @@ import { Account, Address, Chain, Client, erc20Abi, Hex, parseUnits, Transport }
 import { readContract } from "viem/actions";
 
 import { LiquidityVenue } from "../liquidityVenue";
+import { createLogger, serializeError } from "../logger";
 import { ToConvert } from "../types";
 
 import { SwapRouteV2Response } from "./types";
+
+const logger = createLogger({ component: "liquid-swap-venue" });
 
 export class LiquidSwapVenue implements LiquidityVenue {
   kind = "swap" as const;
@@ -48,7 +51,10 @@ export class LiquidSwapVenue implements LiquidityVenue {
         srcAmount: parseUnits(data.amountOut, data.tokens.tokenOut.decimals),
       };
     } catch (error) {
-      console.error("failed to fetch assets decimals or liquid swap route", error);
+      logger.error(
+        { src, dst, chainId: encoder.client.chain.id, error: serializeError(error) },
+        "failed to fetch assets decimals or liquid swap route",
+      );
       return toConvert;
     }
   }

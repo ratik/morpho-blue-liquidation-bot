@@ -9,15 +9,18 @@ import {
 } from "@morpho-blue-liquidation-bot/data-providers";
 
 import { startHealthServer } from "./health";
+import { createLogger, serializeError } from "./logger";
 
 import { launchBot } from ".";
 
+const logger = createLogger({ component: "client-script" });
+
 process.on("unhandledRejection", (reason) => {
-  console.error("Unhandled rejection:", reason);
+  logger.error({ reason: serializeError(reason) }, "Unhandled rejection");
 });
 
 process.on("uncaughtException", (error) => {
-  console.error("Uncaught exception:", error);
+  logger.error({ error: serializeError(error) }, "Uncaught exception");
 });
 
 async function run() {
@@ -51,19 +54,22 @@ async function run() {
   try {
     await startHealthServer();
   } catch (err) {
-    console.error("Failed to start health server:", err);
+    logger.error({ error: serializeError(err) }, "Failed to start health server");
   }
 
   for (const config of configs) {
     const dataProvider = providersByChain.get(config.chainId);
     if (!dataProvider) {
-      console.error(`No data provider for chain ${config.chainId}, skipping`);
+      logger.error({ chainId: config.chainId }, "No data provider for chain, skipping");
       continue;
     }
     try {
       launchBot(config, dataProvider);
     } catch (err) {
-      console.error(`Failed to launch bot for chain ${config.chainId}:`, err);
+      logger.error(
+        { chainId: config.chainId, error: serializeError(err) },
+        "Failed to launch bot for chain",
+      );
     }
   }
 }

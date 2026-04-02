@@ -9,12 +9,14 @@ import { getAddress } from "viem";
 import { readContract } from "viem/actions";
 
 import type { DataProvider, LiquidatablePositionsResult } from "../dataProvider";
+import { createLogger, serializeError } from "../logger";
 
 const DEFAULT_HYPERINDEX_URL = "http://localhost:8080/v1/graphql";
 const HEALTH_CHECK_INTERVAL_MS = 500;
 const SPINNER_FRAMES = ["◰", "◳", "◲", "◱"];
 const HEALTH_CHECK_TIMEOUT_MS = 7_200_000; // 2 hours — full Arbitrum RPC backfill can take a long time
 const BACKFILL_TOLERANCE_BLOCKS = 100; // consider "caught up" when within this many blocks of tip
+const logger = createLogger({ component: "hyperindex-data-provider" });
 
 const oracleAbi = [
   {
@@ -198,17 +200,17 @@ export class HyperIndexDataProvider implements DataProvider {
 
   async init(): Promise<void> {
     if (!this.selfhost) {
-      console.log(`[HyperIndex] Using external instance at ${this.url}`);
+      logger.info({ url: this.url }, `[HyperIndex] Using external instance at ${this.url}`);
       await this.waitForReady();
       return;
     }
 
     const hyperindexDir = new URL("../../../hyperindex", import.meta.url).pathname;
 
-    console.log("[HyperIndex] Generating config...");
+    logger.info({}, "[HyperIndex] Generating config...");
     execSync("pnpm generate:config", { cwd: hyperindexDir, stdio: "inherit" });
 
-    console.log("[HyperIndex] Starting local indexer...");
+    logger.info({}, "[HyperIndex] Starting local indexer...");
     this.indexerProcess = exec("TUI_OFF=true pnpm dev", {
       cwd: hyperindexDir,
     });
@@ -222,17 +224,20 @@ export class HyperIndexDataProvider implements DataProvider {
     });
 
     this.indexerProcess.on("error", (err) => {
-      console.error(`[HyperIndex] Failed to start indexer process: ${err.message}`);
+      logger.error(
+        { error: serializeError(err) },
+        `[HyperIndex] Failed to start indexer process: ${err.message}`,
+      );
     });
 
     this.indexerProcess.on("exit", (code) => {
       if (code !== null && code !== 0) {
-        console.error(`[HyperIndex] Indexer process exited with code ${code}`);
+        logger.error({ code }, `[HyperIndex] Indexer process exited with code ${code}`);
       }
     });
 
     await this.waitForReady();
-    console.log("[HyperIndex] Indexer is ready");
+    logger.info({}, "[HyperIndex] Indexer is ready");
   }
 
   async fetchMarkets(client: Client<Transport, Chain, Account>, vaults: Address[]): Promise<Hex[]> {
@@ -248,7 +253,10 @@ export class HyperIndexDataProvider implements DataProvider {
       );
       return [...new Set(marketIds)] as Hex[];
     } catch (error) {
-      console.error(`[Chain ${client.chain.id}] Error fetching markets from HyperIndex:`, error);
+      logger.error(
+        { chainId: client.chain.id, error: serializeError(error) },
+        `[Chain ${client.chain.id}] Error fetching markets from HyperIndex`,
+      );
       return [];
     }
   }
@@ -466,9 +474,9 @@ export class HyperIndexDataProvider implements DataProvider {
 
       return { liquidatablePositions, preLiquidatablePositions };
     } catch (error) {
-      console.error(
-        `[Chain ${client.chain.id}] Error fetching liquidatable positions from HyperIndex:`,
-        error,
+      logger.error(
+        { chainId: client.chain.id, error: serializeError(error) },
+        `[Chain ${client.chain.id}] Error fetching liquidatable positions from HyperIndex`,
       );
       return { liquidatablePositions: [], preLiquidatablePositions: [] };
     }
@@ -567,7 +575,7 @@ export class HyperIndexDataProvider implements DataProvider {
         }
 
         if (allCaughtUp) {
-          console.log("[HyperIndex] Backfill complete");
+          logger.info({}, "[HyperIndex] Backfill complete");
           return;
         }
       } catch {

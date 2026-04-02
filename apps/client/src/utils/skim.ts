@@ -10,6 +10,10 @@ import {
 } from "viem";
 import { readContract } from "viem/actions";
 
+import { createLogger } from "../logger";
+
+const logger = createLogger({ component: "skim" });
+
 /**
  * Skims the executor's balance of a token by reading the on-chain balance
  * and transferring it to the recipient via erc20Transfer.
@@ -47,6 +51,14 @@ export async function skim(
   if (balance > 0n) {
     encoder.erc20Transfer(token, recipient, balance);
     await encoder.exec();
-    console.log(`Skimmed ${formatUnits(balance, decimals)} ${symbol} to ${recipient}`);
+    logger.info(
+      {
+        token,
+        recipient,
+        balance,
+        symbol,
+      },
+      `Skimmed ${formatUnits(balance, decimals)} ${symbol} to ${recipient}`,
+    );
   }
 }

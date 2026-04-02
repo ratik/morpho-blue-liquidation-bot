@@ -18,7 +18,10 @@ import {
 import { readContract } from "viem/actions";
 
 import { uniswapV3FactoryAbi, uniswapV3PoolAbi } from "../abis/uniswapV3";
+import { createLogger, serializeError } from "../logger";
 import type { Pricer } from "../pricer";
+
+const logger = createLogger({ component: "uniswapv3-pricer" });
 
 export class UniswapV3Pricer implements Pricer {
   private pools: Record<Address, Record<Address, Address[]>> = {};
@@ -88,8 +91,10 @@ export class UniswapV3Pricer implements Pricer {
 
       return token0 === asset ? price : 1 / price;
     } catch (error) {
-      console.log(`Error pricing ${asset} on UniswapV3`);
-      console.error(error);
+      logger.error(
+        { asset, chainId: client.chain.id, error: serializeError(error) },
+        `Error pricing ${asset} on UniswapV3`,
+      );
       return;
     }
   }
@@ -123,10 +128,10 @@ export class UniswapV3Pricer implements Pricer {
 
       return newPools;
     } catch (error) {
-      console.log(
+      logger.error(
+        { src, dst, chainId: client.chain.id, error: serializeError(error) },
         `Error fetching UniswapV3 pools for src: ${src} and dst: ${dst}. Check if the factory address is correct.`,
       );
-      console.error(error);
       return [];
     }
   }

@@ -13,6 +13,7 @@ import { privateKeyToAccount } from "viem/accounts";
 import { watchBlocks } from "viem/actions";
 
 import { LiquidationBot, type LiquidationBotInputs } from "./bot";
+import { createLogger, serializeError } from "./logger";
 import {
   MarketsFetchingCooldownMechanism,
   PositionLiquidationCooldownMechanism,
@@ -20,7 +21,12 @@ import {
 
 export const launchBot = (config: ChainConfig, dataProvider: DataProvider) => {
   const logTag = `[${config.chain.name} client]: `;
-  console.log(`${logTag}Starting up`);
+  const logger = createLogger({
+    component: "client",
+    chainId: config.chain.id,
+    chainName: config.chain.name,
+  });
+  logger.info({ logTag }, `${logTag}Starting up`);
 
   const client = createWalletClient({
     chain: config.chain,
@@ -89,17 +95,20 @@ export const launchBot = (config: ChainConfig, dataProvider: DataProvider) => {
     watchBlocks(client, {
       onBlock: () => {
         if (count % blockInterval === 0) {
-          bot.run().catch((e) => {
-            console.error(`${logTag} uncaught error in bot.run():`, e);
+          bot.run().catch((e: unknown) => {
+            logger.error(
+              { error: serializeError(e), logTag },
+              `${logTag}uncaught error in bot.run()`,
+            );
           });
         }
         count++;
       },
       onError: (error) => {
         const retryDelay = config.watchBlocksRetryDelayMs ?? 5_000;
-        console.error(
-          `${logTag} watchBlocks error, restarting watcher in ${retryDelay}ms:`,
-          error,
+        logger.error(
+          { error: serializeError(error), retryDelay, logTag },
+          `${logTag}watchBlocks error, restarting watcher`,
         );
         setTimeout(startWatching, retryDelay);
       },

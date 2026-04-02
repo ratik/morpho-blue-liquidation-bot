@@ -6,8 +6,11 @@ import type { Account, Address, Chain, Client, Hex, Transport } from "viem";
 import { readContract } from "viem/actions";
 
 import type { DataProvider, LiquidatablePositionsResult } from "../dataProvider";
+import { createLogger, serializeError } from "../logger";
 
 import { apiSdk } from "./api/index";
+
+const logger = createLogger({ component: "morpho-api-data-provider" });
 
 export class MorphoApiDataProvider implements DataProvider {
   async fetchMarkets(client: Client<Transport, Chain, Account>, vaults: Address[]): Promise<Hex[]> {
@@ -18,7 +21,10 @@ export class MorphoApiDataProvider implements DataProvider {
 
       return [...new Set(vaultMarkets.flat())];
     } catch (error) {
-      console.error(`[Chain ${client.chain.id}] Error fetching markets for vaults:`, error);
+      logger.error(
+        { chainId: client.chain.id, error: serializeError(error) },
+        `[Chain ${client.chain.id}] Error fetching markets for vaults`,
+      );
       return [];
     }
   }
@@ -91,7 +97,10 @@ export class MorphoApiDataProvider implements DataProvider {
 
       for (const r of marketResults) {
         if (r.status === "rejected") {
-          console.error(`[Chain ${client.chain.id}] Error fetching market:`, r.reason);
+          logger.error(
+            { chainId: client.chain.id, error: serializeError(r.reason) },
+            `[Chain ${client.chain.id}] Error fetching market`,
+          );
         }
       }
 
@@ -122,7 +131,10 @@ export class MorphoApiDataProvider implements DataProvider {
         preLiquidatablePositions: [],
       };
     } catch (error) {
-      console.error(`[Chain ${client.chain.id}] Error fetching liquidatable positions:`, error);
+      logger.error(
+        { chainId: client.chain.id, error: serializeError(error) },
+        `[Chain ${client.chain.id}] Error fetching liquidatable positions`,
+      );
       return { liquidatablePositions: [], preLiquidatablePositions: [] };
     }
   }
@@ -152,9 +164,13 @@ export class MorphoApiDataProvider implements DataProvider {
         }),
       );
     } catch (error) {
-      console.error(
-        `[Chain ${client.chain.id}] Error fetching vault markets for ${vaultAddress}:`,
-        error,
+      logger.error(
+        {
+          chainId: client.chain.id,
+          vaultAddress,
+          error: serializeError(error),
+        },
+        `[Chain ${client.chain.id}] Error fetching vault markets for ${vaultAddress}`,
       );
       return [];
     }

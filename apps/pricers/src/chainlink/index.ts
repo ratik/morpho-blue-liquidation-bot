@@ -15,7 +15,10 @@ import { readContract } from "viem/actions";
 import { mainnet } from "viem/chains";
 
 import { feedRegistryAbi } from "../abis/feedRegistry";
+import { createLogger, serializeError } from "../logger";
 import type { Pricer } from "../pricer";
+
+const logger = createLogger({ component: "chainlink-pricer" });
 
 type CoinKey = `${string}:${Address}`;
 
@@ -81,11 +84,10 @@ export class ChainlinkPricer implements Pricer {
 
       return price;
     } catch (error) {
-      if (error instanceof Error) {
-        console.error(`Error fetching Chainlink price for ${asset}:`, error);
-      } else {
-        console.error(`Error fetching Chainlink price for ${asset}:`, String(error));
-      }
+      logger.error(
+        { asset, error: serializeError(error) },
+        `Error fetching Chainlink price for ${asset}`,
+      );
       return undefined;
     }
   }

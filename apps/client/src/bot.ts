@@ -33,6 +33,7 @@ import {
   writeContract,
 } from "viem/actions";
 
+import { createLogger, type AppLogger, serializeError } from "./logger";
 import {
   MarketsFetchingCooldownMechanism,
   PositionLiquidationCooldownMechanism,
@@ -61,6 +62,7 @@ export interface LiquidationBotInputs {
 }
 
 export class LiquidationBot {
+  private logger: AppLogger;
   private logTag: string;
   private chainId: number;
   private client: WalletClient<Transport, Chain, Account>;
@@ -80,6 +82,10 @@ export class LiquidationBot {
   private alwaysRealizeBadDebt: boolean;
 
   constructor(inputs: LiquidationBotInputs) {
+    this.logger = createLogger({
+      component: "liquidation-bot",
+      chainId: inputs.chainId,
+    });
     this.logTag = inputs.logTag;
     this.chainId = inputs.chainId;
     this.client = inputs.client;
@@ -155,17 +161,29 @@ export class LiquidationBot {
       const success = await this.handleTx(encoder, calls, marketParams, badDebtPosition);
 
       if (success)
-        console.log(
+        this.logger.info(
+          {
+            user: position.user,
+            marketId: MarketUtils.getMarketId(marketParams),
+          },
           `${this.logTag}Liquidated ${position.user} on ${MarketUtils.getMarketId(marketParams)}`,
         );
       else
-        console.log(
+        this.logger.info(
+          {
+            user: position.user,
+            marketId: MarketUtils.getMarketId(marketParams),
+          },
           `${this.logTag}ℹ️ Skipped ${position.user} on ${MarketUtils.getMarketId(marketParams)} (not profitable)`,
         );
     } catch (error) {
-      console.error(
+      this.logger.error(
+        {
+          error: serializeError(error),
+          user: position.user,
+          marketId: MarketUtils.getMarketId(marketParams),
+        },
         `${this.logTag}Failed to liquidate ${position.user} on ${MarketUtils.getMarketId(marketParams)}`,
-        error,
       );
     }
   }
@@ -202,17 +220,29 @@ export class LiquidationBot {
       const success = await this.handleTx(encoder, calls, marketParams, false);
 
       if (success)
-        console.log(
+        this.logger.info(
+          {
+            user: position.user,
+            marketId: MarketUtils.getMarketId(marketParams),
+          },
           `${this.logTag}Pre-liquidated ${position.user} on ${MarketUtils.getMarketId(marketParams)}`,
         );
       else
-        console.log(
+        this.logger.info(
+          {
+            user: position.user,
+            marketId: MarketUtils.getMarketId(marketParams),
+          },
           `${this.logTag}ℹ️ Skipped ${position.user} on ${MarketUtils.getMarketId(marketParams)} (not profitable)`,
         );
     } catch (error) {
-      console.error(
+      this.logger.error(
+        {
+          error: serializeError(error),
+          user: position.user,
+          marketId: MarketUtils.getMarketId(marketParams),
+        },
         `${this.logTag}Failed to pre-liquidate ${position.user} on ${MarketUtils.getMarketId(marketParams)}`,
-        error,
       );
     }
   }
@@ -252,7 +282,17 @@ export class LiquidationBot {
     ]);
 
     if (results[1].status !== "success") {
-      console.warn(`${this.logTag}Transaction failed in simulation: ${results[1].error}`);
+      this.logger.error(
+        {
+          simulationError: results[1].error,
+          callCount: calls.length,
+          calls,
+          marketId: MarketUtils.getMarketId(marketParams),
+          marketParams,
+          badDebtPosition,
+        },
+        `${this.logTag}Transaction failed in simulation`,
+      );
       return;
     }
 
@@ -337,9 +377,14 @@ export class LiquidationBot {
           transformed = true;
           break;
         } catch (error) {
-          console.error(
+          this.logger.error(
+            {
+              error: serializeError(error),
+              src: toConvert.src,
+              dst: toConvert.dst,
+              venueKind: venue.kind,
+            },
             `${this.logTag}Error converting ${toConvert.src} to ${toConvert.dst}`,
-            error,
           );
         }
       }
@@ -365,7 +410,15 @@ export class LiquidationBot {
         toConvert = await venue.convert(encoder, toConvert);
         if (toConvert.src === toConvert.dst) return toConvert;
       } catch (error) {
-        console.error(`${this.logTag}Error converting ${toConvert.src} to ${toConvert.dst}`, error);
+        this.logger.error(
+          {
+            error: serializeError(error),
+            src: toConvert.src,
+            dst: toConvert.dst,
+            venueKind: venue.kind,
+          },
+          `${this.logTag}Error converting ${toConvert.src} to ${toConvert.dst}`,
+        );
       }
     }
 
@@ -454,7 +507,10 @@ export class LiquidationBot {
       this.vaultWhitelist = await fetchWhitelistedVaults(this.chainId);
 
     const vaultWhitelist = this.vaultWhitelist;
-    console.log(`${this.logTag}📝 Watching markets in the following vaults:`, vaultWhitelist);
+    this.logger.info(
+      { vaultWhitelist, additionalMarketsWhitelist: this.additionalMarketsWhitelist },
+      `${this.logTag}Watching markets in the following vaults`,
+    );
 
     const whitelistedMarketsFromVaults = await this.dataProvider.fetchMarkets(
       this.client,

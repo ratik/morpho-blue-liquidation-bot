@@ -1,6 +1,10 @@
 import type { FastifyInstance } from "fastify";
 import Fastify from "fastify";
 
+import { createLogger, serializeError } from "./logger";
+
+const logger = createLogger({ component: "health-server" });
+
 class HealthServer {
   private fastify: FastifyInstance;
   private port: number;
@@ -25,9 +29,12 @@ class HealthServer {
   async start() {
     try {
       await this.fastify.listen({ port: this.port, host: this.host });
-      console.log(`🚀 Health server listening on http://${this.host}:${this.port}`);
+      logger.info(
+        { host: this.host, port: this.port },
+        `Health server listening on http://${this.host}:${this.port}`,
+      );
     } catch (err) {
-      this.fastify.log.error(err);
+      logger.error({ error: serializeError(err) }, "Failed to start health server");
       throw err;
     }
   }
