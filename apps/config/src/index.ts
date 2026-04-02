@@ -19,12 +19,16 @@ export function chainConfig(chainId: number): ChainConfig {
     );
   }
 
-  const { rpcUrl, executorAddress, liquidationPrivateKey } = getSecrets(chainId, config.chain);
+  const { rpcUrl, simulationRpcUrl, executorAddress, liquidationPrivateKey } = getSecrets(
+    chainId,
+    config.chain,
+  );
   return {
     // Hoist all parameters from `options` up 1 level, i.e. flatten the config as much as possible.
     ...(({ options, ...c }) => ({ ...options, ...c }))(config),
     chainId,
     rpcUrl,
+    simulationRpcUrl,
     executorAddress,
     liquidationPrivateKey,
   };
@@ -34,6 +38,7 @@ export function getSecrets(chainId: number, chain?: Chain) {
   const defaultRpcUrl = chain?.rpcUrls.default.http[0];
 
   const rpcUrl = process.env[`RPC_URL_${chainId}`] ?? defaultRpcUrl;
+  const simulationRpcUrl = process.env[`SIMULATION_RPC_URL_${chainId}`];
   const executorAddress = process.env[`EXECUTOR_ADDRESS_${chainId}`];
   const liquidationPrivateKey = process.env[`LIQUIDATION_PRIVATE_KEY_${chainId}`];
 
@@ -48,6 +53,7 @@ export function getSecrets(chainId: number, chain?: Chain) {
   }
   return {
     rpcUrl,
+    simulationRpcUrl,
     executorAddress: executorAddress as Address,
     liquidationPrivateKey: liquidationPrivateKey as Hex,
   };

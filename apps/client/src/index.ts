@@ -33,8 +33,22 @@ export const launchBot = async (config: ChainConfig, dataProvider: DataProvider)
     transport: http(config.rpcUrl),
     account: privateKeyToAccount(config.liquidationPrivateKey),
   });
+  const simulationRpcUrl = config.simulationRpcUrl ?? config.rpcUrl;
+  const simulationClient = createWalletClient({
+    chain: config.chain,
+    transport: http(simulationRpcUrl),
+    account: privateKeyToAccount(config.liquidationPrivateKey),
+  });
 
   logger.debug({ logTag }, `${logTag}Wallet client created with address ${client.account.address}`);
+  logger.info(
+    {
+      logTag,
+      simulationRpcSource: config.simulationRpcUrl ? "dedicated" : "main",
+      simulationRpcUrl,
+    },
+    `${logTag}Simulation RPC configured`,
+  );
 
   // LIQUIDITY VENUES
   const liquidityVenueEntries = config.liquidityVenues.map((liquidityVenueName) => ({
@@ -101,6 +115,7 @@ export const launchBot = async (config: ChainConfig, dataProvider: DataProvider)
     logTag,
     chainId: config.chainId,
     client,
+    simulationClient,
     wNative: config.wNative,
     vaultWhitelist: config.vaultWhitelist,
     additionalMarketsWhitelist: config.additionalMarketsWhitelist,

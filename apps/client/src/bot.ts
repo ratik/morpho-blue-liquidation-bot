@@ -48,6 +48,7 @@ export interface LiquidationBotInputs {
   logTag: string;
   chainId: number;
   client: WalletClient<Transport, Chain, Account>;
+  simulationClient: WalletClient<Transport, Chain, Account>;
   wNative: Address;
   vaultWhitelist: Address[] | "morpho-api";
   additionalMarketsWhitelist: Hex[];
@@ -67,6 +68,7 @@ export class LiquidationBot {
   private logTag: string;
   private chainId: number;
   private client: WalletClient<Transport, Chain, Account>;
+  private simulationClient: WalletClient<Transport, Chain, Account>;
   private chainAddresses: ChainAddresses;
   private wNative: Address;
   private vaultWhitelist: Address[] | "morpho-api";
@@ -90,6 +92,7 @@ export class LiquidationBot {
     this.logTag = inputs.logTag;
     this.chainId = inputs.chainId;
     this.client = inputs.client;
+    this.simulationClient = inputs.simulationClient;
     this.chainAddresses = getChainAddresses(inputs.chainId);
     this.wNative = inputs.wNative;
     this.vaultWhitelist = inputs.vaultWhitelist;
@@ -261,7 +264,7 @@ export class LiquidationBot {
     } as const;
 
     const [{ results }, gasPrice] = await Promise.all([
-      simulateCalls(this.client, {
+      simulateCalls(this.simulationClient, {
         account: this.client.account.address,
         calls: [
           {
@@ -286,6 +289,7 @@ export class LiquidationBot {
       this.logger.error(
         {
           simulationError: results[1].error,
+          simulationRpcSource: this.simulationClient === this.client ? "main" : "dedicated",
           callCount: calls.length,
           calls,
           marketId: MarketUtils.getMarketId(marketParams),
