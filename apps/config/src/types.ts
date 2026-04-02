@@ -29,8 +29,7 @@ export interface Options {
   treasuryAddress?: Address;
   liquidationBufferBps?: number;
   useFlashbots: boolean;
-  blockInterval?: number;
-  watchBlocksRetryDelayMs?: number;
+  pollingIntervalMs?: number;
 }
 
 export type ChainConfig = Omit<Config, "options"> &

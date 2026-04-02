@@ -41,7 +41,7 @@ export const chainConfigs: Record<number, Config> = {
       pricers: ["defillama", "chainlink", "uniswapV3"],
       liquidationBufferBps: 50,
       useFlashbots: true,
-      blockInterval: 2,
+      pollingIntervalMs: 24_000,
     },
   },
   [base.id]: {
@@ -63,7 +63,7 @@ export const chainConfigs: Record<number, Config> = {
       pricers: ["defillama", "chainlink", "uniswapV3"],
       liquidationBufferBps: 50,
       useFlashbots: false,
-      blockInterval: 10,
+      pollingIntervalMs: 20_000,
     },
   },
   [unichain.id]: {
@@ -76,7 +76,7 @@ export const chainConfigs: Record<number, Config> = {
       liquidityVenues: ["1inch", "erc20Wrapper", "erc4626", "uniswapV3", "uniswapV4"],
       liquidationBufferBps: 50,
       useFlashbots: false,
-      blockInterval: 5,
+      pollingIntervalMs: 10_000,
     },
   },
   [katana.id]: {
@@ -89,7 +89,7 @@ export const chainConfigs: Record<number, Config> = {
       liquidityVenues: ["erc20Wrapper", "erc4626", "uniswapV3", "uniswapV4"],
       liquidationBufferBps: 50,
       useFlashbots: false,
-      blockInterval: 5,
+      pollingIntervalMs: 10_000,
     },
   },
   [arbitrum.id]: {
@@ -102,6 +102,7 @@ export const chainConfigs: Record<number, Config> = {
       liquidityVenues: ["pendlePT", "1inch", "erc20Wrapper", "erc4626", "uniswapV3", "uniswapV4"],
       liquidationBufferBps: 50,
       useFlashbots: false,
+      pollingIntervalMs: 10_000,
     },
   },
   [worldchain.id]: {
@@ -119,7 +120,7 @@ export const chainConfigs: Record<number, Config> = {
       liquidityVenues: ["erc20Wrapper", "erc4626", "uniswapV3", "uniswapV4"],
       liquidationBufferBps: 50,
       useFlashbots: false,
-      blockInterval: 5,
+      pollingIntervalMs: 10_000,
     },
   },
   [hyperevm.id]: {
@@ -136,6 +137,7 @@ export const chainConfigs: Record<number, Config> = {
       additionalMarketsWhitelist: [],
       liquidationBufferBps: 50,
       useFlashbots: false,
+      pollingIntervalMs: 10_000,
     },
   },
   [monad.id]: {
@@ -148,7 +150,7 @@ export const chainConfigs: Record<number, Config> = {
       liquidityVenues: ["erc20Wrapper", "erc4626", "uniswapV3"],
       liquidationBufferBps: 50,
       useFlashbots: false,
-      blockInterval: 10,
+      pollingIntervalMs: 20_000,
     },
   },
 };

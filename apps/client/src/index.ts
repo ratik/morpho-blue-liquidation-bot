@@ -10,7 +10,6 @@ import { createLiquidityVenue } from "@morpho-blue-liquidation-bot/liquidity-ven
 import { createPricer } from "@morpho-blue-liquidation-bot/pricers";
 import { createWalletClient, Hex, http } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
-import { watchBlocks } from "viem/actions";
 
 import { LiquidationBot, type LiquidationBotInputs } from "./bot";
 import { createLogger, serializeError } from "./logger";
@@ -132,32 +131,42 @@ export const launchBot = async (config: ChainConfig, dataProvider: DataProvider)
 
   const bot = new LiquidationBot(inputs);
 
-  const blockInterval = config.blockInterval ?? 1;
-  let count = 0;
+  const pollingIntervalMs = config.pollingIntervalMs ?? 10_000;
+  logger.info({ logTag, pollingIntervalMs }, `${logTag}Polling configured`);
 
-  const startWatching = () => {
-    watchBlocks(client, {
-      onBlock: () => {
-        if (count % blockInterval === 0) {
-          bot.run().catch((e: unknown) => {
-            logger.error(
-              { error: serializeError(e), logTag },
-              `${logTag}uncaught error in bot.run()`,
-            );
-          });
-        }
-        count++;
-      },
-      onError: (error) => {
-        const retryDelay = config.watchBlocksRetryDelayMs ?? 5_000;
-        logger.error(
-          { error: serializeError(error), retryDelay, logTag },
-          `${logTag}watchBlocks error, restarting watcher`,
-        );
-        setTimeout(startWatching, retryDelay);
-      },
-    });
+  let isRunning = false;
+  let rerunRequested = false;
+
+  const runCycle = async () => {
+    if (isRunning) {
+      rerunRequested = true;
+      logger.info({ logTag }, `${logTag}Polling tick coalesced into queued rerun`);
+      return;
+    }
+
+    isRunning = true;
+    do {
+      rerunRequested = false;
+      try {
+        await bot.run();
+      } catch (e: unknown) {
+        logger.error({ error: serializeError(e), logTag }, `${logTag}uncaught error in bot.run()`);
+      }
+    } while (rerunRequested);
+
+    isRunning = false;
   };
 
-  startWatching();
+  const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+  const startPolling = async () => {
+    await runCycle();
+
+    while (true) {
+      await sleep(pollingIntervalMs);
+      await runCycle();
+    }
+  };
+
+  void startPolling();
 };

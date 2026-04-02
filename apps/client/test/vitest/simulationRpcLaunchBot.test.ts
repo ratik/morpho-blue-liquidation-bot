@@ -1,22 +1,16 @@
 import type { ChainConfig } from "@morpho-blue-liquidation-bot/config";
 import { base } from "viem/chains";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-const {
-  createWalletClientMock,
-  httpMock,
-  watchBlocksMock,
-  privateKeyToAccountMock,
-  liquidatonBotRunMock,
-} = vi.hoisted(() => ({
-  createWalletClientMock: vi.fn(),
-  httpMock: vi.fn((url: string) => ({ url })),
-  watchBlocksMock: vi.fn(),
-  privateKeyToAccountMock: vi.fn(() => ({
-    address: "0x0000000000000000000000000000000000000002",
-  })),
-  liquidatonBotRunMock: vi.fn(),
-}));
+const { createWalletClientMock, httpMock, privateKeyToAccountMock, liquidatonBotRunMock } =
+  vi.hoisted(() => ({
+    createWalletClientMock: vi.fn(),
+    httpMock: vi.fn((url: string) => ({ url })),
+    privateKeyToAccountMock: vi.fn(() => ({
+      address: "0x0000000000000000000000000000000000000002",
+    })),
+    liquidatonBotRunMock: vi.fn(),
+  }));
 
 let lastBotInputs: unknown;
 
@@ -32,14 +26,6 @@ vi.mock("viem", async () => {
 vi.mock("viem/accounts", () => ({
   privateKeyToAccount: privateKeyToAccountMock,
 }));
-
-vi.mock("viem/actions", async () => {
-  const actual = await vi.importActual<typeof import("viem/actions")>("viem/actions");
-  return {
-    ...actual,
-    watchBlocks: watchBlocksMock,
-  };
-});
 
 vi.mock("../../src/bot.js", () => ({
   LiquidationBot: class {
@@ -67,8 +53,7 @@ function createConfig(overrides: Partial<ChainConfig> = {}): ChainConfig {
     treasuryAddress: undefined,
     liquidationBufferBps: undefined,
     useFlashbots: false,
-    blockInterval: 1,
-    watchBlocksRetryDelayMs: 5000,
+    pollingIntervalMs: 10_000,
     dataProvider: "morphoApi",
     executorAddress: "0x0000000000000000000000000000000000000004",
     liquidationPrivateKey: "0x1111111111111111111111111111111111111111111111111111111111111111",
@@ -81,9 +66,9 @@ describe("launchBot simulation client", () => {
     lastBotInputs = undefined;
     createWalletClientMock.mockReset();
     httpMock.mockClear();
-    watchBlocksMock.mockReset();
     privateKeyToAccountMock.mockClear();
     liquidatonBotRunMock.mockReset();
+    vi.useFakeTimers();
 
     createWalletClientMock
       .mockReturnValueOnce({
@@ -96,8 +81,15 @@ describe("launchBot simulation client", () => {
       });
   });
 
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
   it("creates a separate simulation client when simulationRpcUrl is configured", async () => {
+    liquidatonBotRunMock.mockResolvedValue(undefined);
+
     await launchBot(createConfig(), {} as never);
+    await vi.runOnlyPendingTimersAsync();
 
     expect(httpMock).toHaveBeenNthCalledWith(1, "https://main-rpc.example");
     expect(httpMock).toHaveBeenNthCalledWith(2, "https://simulation-rpc.example");
@@ -108,10 +100,38 @@ describe("launchBot simulation client", () => {
   });
 
   it("falls back to the main RPC when simulationRpcUrl is unset", async () => {
+    liquidatonBotRunMock.mockResolvedValue(undefined);
+
     await launchBot(createConfig({ simulationRpcUrl: undefined }), {} as never);
+    await vi.runOnlyPendingTimersAsync();
 
     expect(httpMock).toHaveBeenNthCalledWith(1, "https://main-rpc.example");
     expect(httpMock).toHaveBeenNthCalledWith(2, "https://main-rpc.example");
     expect(createWalletClientMock).toHaveBeenCalledTimes(2);
+  });
+
+  it("runs immediately on startup and schedules the next polling iteration", async () => {
+    liquidatonBotRunMock.mockResolvedValue(undefined);
+
+    await launchBot(createConfig({ pollingIntervalMs: 50 }), {} as never);
+    expect(liquidatonBotRunMock).toHaveBeenCalledTimes(1);
+
+    await vi.advanceTimersByTimeAsync(50);
+    expect(liquidatonBotRunMock).toHaveBeenCalledTimes(2);
+  });
+
+  it("does not start overlapping runs when a tick lands during an active run", async () => {
+    liquidatonBotRunMock.mockImplementation(
+      () =>
+        new Promise<void>(() => {
+          return undefined;
+        }),
+    );
+
+    await launchBot(createConfig({ pollingIntervalMs: 50 }), {} as never);
+    expect(liquidatonBotRunMock).toHaveBeenCalledTimes(1);
+
+    await vi.advanceTimersByTimeAsync(150);
+    expect(liquidatonBotRunMock).toHaveBeenCalledTimes(1);
   });
 });
