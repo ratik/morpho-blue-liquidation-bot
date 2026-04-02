@@ -45,9 +45,9 @@ export const launchBot = async (config: ChainConfig, dataProvider: DataProvider)
 
   for (const { name, venue } of liquidityVenueEntries) {
     try {
-      logger.debug({ venue: name, logTag }, `${logTag}initializing liquidity venue`);
+      logger.debug({ venue: name, logTag }, `${logTag}>>initializing liquidity venue`);
       await venue.init?.(client);
-      logger.debug({ venue: name, logTag }, `${logTag}initialized liquidity venue`);
+      logger.debug({ venue: name, logTag }, `${logTag}<<initialized liquidity venue`);
     } catch (error) {
       logger.error(
         { venue: name, error: serializeError(error), logTag },

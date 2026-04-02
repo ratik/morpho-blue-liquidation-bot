@@ -242,7 +242,10 @@ export class UniswapV4Venue implements LiquidityVenue {
   private async syncPools(client: LiquidityVenueClient, source: "startup" | "background") {
     const deployments = DEPLOYMENTS[client.chain.id];
     if (!deployments) return;
-
+    logger.debug(
+      { chainId: client.chain.id, chainName: client.chain.name, source },
+      "syncing uniswap v4 pools",
+    );
     const latestBlock = await getBlockNumber(client);
     const fromBlock =
       this.lastProcessedBlock === undefined
@@ -254,11 +257,35 @@ export class UniswapV4Venue implements LiquidityVenue {
       return;
     }
 
+    logger.debug(
+      {
+        chainId: client.chain.id,
+        chainName: client.chain.name,
+        fromBlock,
+        toBlock: latestBlock,
+        source,
+      },
+      "fetching uniswap v4 pool events",
+    );
     try {
       let cursor = fromBlock;
       let newPoolCount = 0;
 
       while (cursor <= latestBlock) {
+        logger.debug(
+          {
+            chainId: client.chain.id,
+            chainName: client.chain.name,
+            fromBlock: cursor,
+            toBlock:
+              cursor + this.logChunkSize - 1n > latestBlock
+                ? latestBlock
+                : cursor + this.logChunkSize - 1n,
+            source,
+          },
+          "fetching uniswap v4 pool events chunk",
+        );
+
         const toBlock =
           cursor + this.logChunkSize - 1n > latestBlock
             ? latestBlock
