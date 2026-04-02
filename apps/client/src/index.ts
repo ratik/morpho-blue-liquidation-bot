@@ -34,6 +34,8 @@ export const launchBot = async (config: ChainConfig, dataProvider: DataProvider)
     account: privateKeyToAccount(config.liquidationPrivateKey),
   });
 
+  logger.debug({ logTag }, `${logTag}Wallet client created with address ${client.account.address}`);
+
   // LIQUIDITY VENUES
   const liquidityVenueEntries = config.liquidityVenues.map((liquidityVenueName) => ({
     name: liquidityVenueName,
@@ -43,7 +45,9 @@ export const launchBot = async (config: ChainConfig, dataProvider: DataProvider)
 
   for (const { name, venue } of liquidityVenueEntries) {
     try {
+      logger.debug({ venue: name, logTag }, `${logTag}initializing liquidity venue`);
       await venue.init?.(client);
+      logger.debug({ venue: name, logTag }, `${logTag}initialized liquidity venue`);
     } catch (error) {
       logger.error(
         { venue: name, error: serializeError(error), logTag },
@@ -54,6 +58,7 @@ export const launchBot = async (config: ChainConfig, dataProvider: DataProvider)
 
   for (const { name, venue } of liquidityVenueEntries) {
     try {
+      logger.debug({ venue: name, logTag }, `${logTag}starting liquidity venue background sync`);
       venue.startBackgroundSync?.(client);
     } catch (error) {
       logger.error(
