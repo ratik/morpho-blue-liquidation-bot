@@ -39,6 +39,10 @@ export class MorphoApiDataProvider implements DataProvider {
       const allPositions: NonNullable<
         Awaited<ReturnType<typeof apiSdk.getLiquidatablePositions>>["marketPositions"]["items"]
       > = [];
+      logger.info(
+        { chainId: client.chain.id, marketIdsLength: marketIds.length },
+        `[Chain ${client.chain.id}] Fetching liquidatable positions for ${marketIds.length} markets`,
+      );
 
       // Batch market IDs into chunks of 100 (API limit)
       for (let i = 0; i < marketIds.length; i += MARKET_BATCH_SIZE) {
@@ -123,6 +127,11 @@ export class MorphoApiDataProvider implements DataProvider {
           return accrualPosition;
         })
         .filter((position) => position !== undefined);
+
+      logger.info(
+        { chainId: client.chain.id, liquidatablePositionsLength: accruedPositions.length },
+        `[Chain ${client.chain.id}] Fetched ${accruedPositions.length} liquidatable positions`,
+      );
 
       return {
         liquidatablePositions: accruedPositions.filter(
