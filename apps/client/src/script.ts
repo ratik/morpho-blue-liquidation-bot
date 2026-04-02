@@ -64,7 +64,7 @@ async function run() {
       continue;
     }
     try {
-      launchBot(config, dataProvider);
+      await launchBot(config, dataProvider);
     } catch (err) {
       logger.error(
         { chainId: config.chainId, error: serializeError(err) },

@@ -19,7 +19,7 @@ import {
   PositionLiquidationCooldownMechanism,
 } from "./utils/cooldownMechanisms";
 
-export const launchBot = (config: ChainConfig, dataProvider: DataProvider) => {
+export const launchBot = async (config: ChainConfig, dataProvider: DataProvider) => {
   const logTag = `[${config.chain.name} client]: `;
   const logger = createLogger({
     component: "client",
@@ -35,9 +35,33 @@ export const launchBot = (config: ChainConfig, dataProvider: DataProvider) => {
   });
 
   // LIQUIDITY VENUES
-  const liquidityVenues = config.liquidityVenues.map((liquidityVenueName) =>
-    createLiquidityVenue(liquidityVenueName),
-  );
+  const liquidityVenueEntries = config.liquidityVenues.map((liquidityVenueName) => ({
+    name: liquidityVenueName,
+    venue: createLiquidityVenue(liquidityVenueName),
+  }));
+  const liquidityVenues = liquidityVenueEntries.map(({ venue }) => venue);
+
+  for (const { name, venue } of liquidityVenueEntries) {
+    try {
+      await venue.init?.(client);
+    } catch (error) {
+      logger.error(
+        { venue: name, error: serializeError(error), logTag },
+        `${logTag}failed to initialize liquidity venue`,
+      );
+    }
+  }
+
+  for (const { name, venue } of liquidityVenueEntries) {
+    try {
+      venue.startBackgroundSync?.(client);
+    } catch (error) {
+      logger.error(
+        { venue: name, error: serializeError(error), logTag },
+        `${logTag}failed to start liquidity venue background sync`,
+      );
+    }
+  }
 
   // PRICERS
   const pricers = config.pricers

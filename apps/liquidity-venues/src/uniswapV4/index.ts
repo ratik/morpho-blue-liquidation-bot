@@ -6,6 +6,7 @@ import {
   type Address,
   encodeFunctionData,
   erc20Abi,
+  getAddress,
   type GetContractEventsReturnType,
   type Hex,
   maxUint256,
@@ -13,7 +14,7 @@ import {
   type ValueOf,
   zeroAddress,
 } from "viem";
-import { getContractEvents, multicall, readContract } from "viem/actions";
+import { getBlockNumber, getContractEvents, multicall, readContract } from "viem/actions";
 
 import { permit2Abi } from "../abis/permit2";
 import {
@@ -21,28 +22,54 @@ import {
   uniswapV4PoolManagerAbi,
   uniswapV4StateViewAbi,
 } from "../abis/uniswapV4";
-import type { LiquidityVenue } from "../liquidityVenue";
+import type { LiquidityVenue, LiquidityVenueClient } from "../liquidityVenue";
+import { createLogger, serializeError } from "../logger";
 import type { ToConvert } from "../types";
+
+const logger = createLogger({ component: "uniswap-v4-venue" });
+
+type InitializeEvent = Awaited<
+  GetContractEventsReturnType<typeof uniswapV4PoolManagerAbi, "Initialize", true>
+>[number];
+type InitializePool = InitializeEvent["args"];
 
 export class UniswapV4Venue implements LiquidityVenue {
   kind = "swap" as const;
-  private STALE_TIME = 60 * 60 * 1000; // 1 hour
-  private poolCreationEventsCache: Record<
-    Hex,
-    {
-      events: Awaited<
-        GetContractEventsReturnType<typeof uniswapV4PoolManagerAbi, "Initialize", true>
-      >;
-      lastUpdate: number;
+  private readonly refreshIntervalMs = 15 * 60 * 1000;
+  private readonly logChunkSize = 50_000n;
+  private poolsByPair: Record<Hex, InitializePool[]> = {};
+  private lastProcessedBlock: bigint | undefined;
+  private backgroundSyncTimer: ReturnType<typeof setInterval> | undefined;
+
+  async init(client: LiquidityVenueClient) {
+    await this.syncPools(client, "startup");
+  }
+
+  startBackgroundSync(client: LiquidityVenueClient) {
+    if (this.backgroundSyncTimer !== undefined || DEPLOYMENTS[client.chain.id] === undefined) {
+      return;
     }
-  > = {};
+
+    this.backgroundSyncTimer = setInterval(() => {
+      void this.syncPools(client, "background").catch(() => undefined);
+    }, this.refreshIntervalMs);
+  }
+
+  stopBackgroundSync() {
+    if (this.backgroundSyncTimer !== undefined) {
+      clearInterval(this.backgroundSyncTimer);
+      this.backgroundSyncTimer = undefined;
+    }
+  }
 
   supportsRoute(
     encoder: ExecutorEncoder,
     _src: Address,
     _dst: Address,
   ): Promise<boolean> | boolean {
-    return DEPLOYMENTS[encoder.client.chain.id] !== undefined;
+    if (DEPLOYMENTS[encoder.client.chain.id] === undefined) return false;
+    if (this.lastProcessedBlock !== undefined) return true;
+    return this.init(encoder.client).then(() => true);
   }
 
   async convert(encoder: ExecutorEncoder, toConvert: ToConvert) {
@@ -194,40 +221,119 @@ export class UniswapV4Venue implements LiquidityVenue {
     src: Address,
     dst: Address,
   ) {
+    if (this.lastProcessedBlock === undefined) {
+      await this.init(encoder.client);
+    }
+
     // Each pool's currencies are always sorted numerically.
     const [currency0, currency1] = BigInt(src) < BigInt(dst) ? [src, dst] : [dst, src];
 
-    const cache = this.poolCreationEventsCache[`${currency0}${currency1}`];
-    const cacheIsValid = cache?.lastUpdate && Date.now() - cache.lastUpdate < this.STALE_TIME;
+    if (poolManager.address !== DEPLOYMENTS[encoder.client.chain.id]?.PoolManager.address) {
+      return { currency0, currency1, pools: [] };
+    }
+
+    return {
+      currency0,
+      currency1,
+      pools: this.poolsByPair[this.poolKey(currency0, currency1)] ?? [],
+    };
+  }
+
+  private async syncPools(client: LiquidityVenueClient, source: "startup" | "background") {
+    const deployments = DEPLOYMENTS[client.chain.id];
+    if (!deployments) return;
+
+    const latestBlock = await getBlockNumber(client);
+    const fromBlock =
+      this.lastProcessedBlock === undefined
+        ? (deployments.PoolManager.fromBlock ?? 0n)
+        : this.lastProcessedBlock + 1n;
+
+    if (fromBlock > latestBlock) {
+      this.lastProcessedBlock = latestBlock;
+      return;
+    }
 
     try {
-      const poolCreationEvents = cacheIsValid
-        ? cache.events
-        : await getContractEvents(encoder.client, {
-            ...poolManager,
-            abi: uniswapV4PoolManagerAbi,
-            eventName: "Initialize",
-            args: { currency0, currency1 },
-            strict: true,
-          });
+      let cursor = fromBlock;
+      let newPoolCount = 0;
 
-      if (!cacheIsValid) {
-        this.poolCreationEventsCache[`${currency0}${currency1}`] = {
-          events: poolCreationEvents,
-          lastUpdate: Date.now(),
-        };
+      while (cursor <= latestBlock) {
+        const toBlock =
+          cursor + this.logChunkSize - 1n > latestBlock
+            ? latestBlock
+            : cursor + this.logChunkSize - 1n;
+
+        const events = await getContractEvents(client, {
+          ...deployments.PoolManager,
+          abi: uniswapV4PoolManagerAbi,
+          eventName: "Initialize",
+          strict: true,
+          fromBlock: cursor,
+          toBlock,
+        });
+
+        newPoolCount += this.addPools(events);
+        cursor = toBlock + 1n;
       }
 
-      // Ignore pools with hooks, as we don't know what extra data they'd require for swaps.
-      const pools = poolCreationEvents
-        .filter((ev) => ev.args.hooks === zeroAddress)
-        .map((ev) => ev.args);
+      this.lastProcessedBlock = latestBlock;
 
-      return { currency0, currency1, pools };
+      logger.info(
+        {
+          chainId: client.chain.id,
+          chainName: client.chain.name,
+          fromBlock,
+          toBlock: latestBlock,
+          poolsIndexed: newPoolCount,
+          source,
+        },
+        "refreshed uniswap v4 pool cache",
+      );
     } catch (error) {
+      logger.error(
+        {
+          chainId: client.chain.id,
+          chainName: client.chain.name,
+          fromBlock,
+          toBlock: latestBlock,
+          source,
+          error: serializeError(error),
+        },
+        "failed to refresh uniswap v4 pool cache",
+      );
       throw new Error(
         `(UniswapV4) Error fetching pools: ${error instanceof Error ? error.message : String(error)}`,
       );
     }
+  }
+
+  private addPools(events: InitializeEvent[]) {
+    let added = 0;
+
+    for (const event of events) {
+      const pool = event.args;
+      if (pool.hooks !== zeroAddress) continue;
+
+      const pairKey = this.poolKey(pool.currency0, pool.currency1);
+      const existingPools = this.poolsByPair[pairKey] ?? [];
+      if (existingPools.some((existingPool) => existingPool.id === pool.id)) {
+        continue;
+      }
+
+      existingPools.push(pool);
+      this.poolsByPair[pairKey] = existingPools;
+      added += 1;
+    }
+
+    return added;
+  }
+
+  private poolKey(currency0: Address, currency1: Address) {
+    const [sorted0, sorted1] =
+      BigInt(currency0) < BigInt(currency1)
+        ? [getAddress(currency0), getAddress(currency1)]
+        : [getAddress(currency1), getAddress(currency0)];
+    return `${sorted0}${sorted1}` as Hex;
   }
 }

@@ -7,7 +7,8 @@ import { BigIntish } from "@morpho-org/blue-sdk";
 import { type ExecutorEncoder } from "executooor-viem";
 import { type Address, getAddress, maxUint256 } from "viem";
 
-import type { LiquidityVenue } from "../liquidityVenue";
+import type { LiquidityVenue, LiquidityVenueClient } from "../liquidityVenue";
+import { createLogger, serializeError } from "../logger";
 import type { ToConvert } from "../types";
 
 import {
@@ -17,6 +18,8 @@ import {
   SwapCallData,
   SwapParams,
 } from "./types";
+
+const logger = createLogger({ component: "pendle-pt-venue" });
 
 async function getApiData<T extends {}, U>(
   chainId: number,
@@ -71,30 +74,47 @@ export class PendlePTVenue implements LiquidityVenue {
   kind = "transform" as const;
   private pendleMarkets: Record<number, PendleMarketsResponse | undefined> = {};
   private lastPoolRefresh: Record<number, number | undefined> = {};
+  private backgroundSyncTimers: Record<number, ReturnType<typeof setInterval> | undefined> = {};
+
+  async init(client: LiquidityVenueClient) {
+    await this.refreshMarkets(client.chain.id);
+  }
+
+  startBackgroundSync(client: LiquidityVenueClient) {
+    const chainId = client.chain.id;
+    if (this.backgroundSyncTimers[chainId] !== undefined) return;
+
+    this.backgroundSyncTimers[chainId] = setInterval(() => {
+      void this.refreshMarkets(chainId).catch(() => undefined);
+    }, API_REFRESH_INTERVAL);
+  }
+
+  stopBackgroundSync() {
+    for (const chainId of Object.keys(this.backgroundSyncTimers)) {
+      const timer = this.backgroundSyncTimers[Number(chainId)];
+      if (timer !== undefined) {
+        clearInterval(timer);
+        this.backgroundSyncTimers[Number(chainId)] = undefined;
+      }
+    }
+  }
 
   async supportsRoute(encoder: ExecutorEncoder, src: Address, dst: Address) {
     if (src === dst) return false;
 
-    if (
-      this.pendleMarkets[encoder.client.chain.id] === undefined ||
-      this.lastPoolRefresh[encoder.client.chain.id] === undefined ||
-      Date.now() - (this.lastPoolRefresh[encoder.client.chain.id] ?? 0) > API_REFRESH_INTERVAL
-    ) {
-      try {
-        this.pendleMarkets[encoder.client.chain.id] = await getMarkets(encoder.client.chain.id);
-        this.lastPoolRefresh[encoder.client.chain.id] = Date.now();
-      } catch (error) {
-        this.lastPoolRefresh[encoder.client.chain.id] = Date.now(); // prevent infinite retries
-        throw new Error(
-          `(PendlePT) Error fetching pendle tokens: ${error instanceof Error ? error.message : String(error)}`,
-        );
-      }
+    if (this.pendleMarkets[encoder.client.chain.id] === undefined) {
+      await this.refreshMarkets(encoder.client.chain.id);
     }
+
     return this.isPT(src, encoder.client.chain.id);
   }
 
   async convert(encoder: ExecutorEncoder, toConvert: ToConvert) {
     const { src, dst, srcAmount } = toConvert;
+
+    if (this.pendleMarkets[encoder.client.chain.id] === undefined) {
+      await this.refreshMarkets(encoder.client.chain.id);
+    }
 
     const chainMarkets = this.pendleMarkets[encoder.client.chain.id];
     if (!chainMarkets) throw new Error("(PendlePT) Markets not loaded");
@@ -213,5 +233,20 @@ export class PendlePTVenue implements LiquidityVenue {
         return ptAddress === token.toLowerCase();
       }) ?? false
     );
+  }
+
+  private async refreshMarkets(chainId: number) {
+    try {
+      this.pendleMarkets[chainId] = await getMarkets(chainId);
+      this.lastPoolRefresh[chainId] = Date.now();
+    } catch (error) {
+      logger.error(
+        { chainId, error: serializeError(error) },
+        "failed to refresh pendle markets cache",
+      );
+      throw new Error(
+        `(PendlePT) Error fetching pendle tokens: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
   }
 }

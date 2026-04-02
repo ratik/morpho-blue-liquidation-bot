@@ -1,9 +1,10 @@
 import type { ExecutorEncoder } from "executooor-viem";
-import type { Address } from "viem";
+import type { Account, Address, Chain, Client, Transport } from "viem";
 
 import type { ToConvert } from "./types";
 
 export type LiquidityVenueKind = "transform" | "swap";
+export type LiquidityVenueClient = Client<Transport, Chain, Account>;
 
 /**
  * Liquidity venues are used to convert an amount from a source token to a destination token.
@@ -14,6 +15,21 @@ export interface LiquidityVenue {
    * Venue class used by the bot to apply deterministic unwrap/redeem steps before swap venues.
    */
   kind: LiquidityVenueKind;
+
+  /**
+   * Optional startup hook for prewarming caches before liquidations begin.
+   */
+  init?(client: LiquidityVenueClient): Promise<void> | void;
+
+  /**
+   * Optional background loop for keeping venue caches fresh outside the liquidation path.
+   */
+  startBackgroundSync?(client: LiquidityVenueClient): void;
+
+  /**
+   * Optional cleanup hook for background sync resources.
+   */
+  stopBackgroundSync?(): Promise<void> | void;
 
   /**
    * Whether the venue is adapted to the conversion.
