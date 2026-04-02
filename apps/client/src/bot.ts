@@ -33,6 +33,7 @@ import {
   writeContract,
 } from "viem/actions";
 
+import { morphoBlueAbi } from "./abis/morpho/morphoBlue";
 import { createLogger, type AppLogger, serializeError } from "./logger";
 import {
   MarketsFetchingCooldownMechanism,
@@ -518,5 +519,54 @@ export class LiquidationBot {
     );
 
     this.coveredMarkets = [...whitelistedMarketsFromVaults, ...this.additionalMarketsWhitelist];
+    await this.seedLiquidityVenuePairs();
+  }
+
+  private async seedLiquidityVenuePairs() {
+    const pairAwareVenues = this.liquidityVenues.filter(
+      (
+        venue,
+      ): venue is typeof venue & { registerTokenPair: (src: Address, dst: Address) => void } =>
+        venue.registerTokenPair !== undefined,
+    );
+    if (pairAwareVenues.length === 0 || this.coveredMarkets.length === 0) return;
+
+    const uniqueMarketIds = [...new Set(this.coveredMarkets)];
+    const results = await Promise.allSettled(
+      uniqueMarketIds.map((marketId) =>
+        readContract(this.client, {
+          address: this.chainAddresses.morpho,
+          abi: morphoBlueAbi,
+          functionName: "idToMarketParams",
+          args: [marketId],
+        }),
+      ),
+    );
+
+    const pairKeys = new Set<string>();
+    for (const result of results) {
+      if (result.status === "rejected") {
+        this.logger.error(
+          { error: serializeError(result.reason) },
+          `${this.logTag}Failed to fetch market params while seeding liquidity venue pairs`,
+        );
+        continue;
+      }
+
+      const [loanToken, collateralToken] = result.value;
+      pairKeys.add(`${collateralToken}:${loanToken}`);
+    }
+
+    for (const pairKey of pairKeys) {
+      const [collateralToken, loanToken] = pairKey.split(":") as [Address, Address];
+      for (const venue of pairAwareVenues) {
+        venue.registerTokenPair(collateralToken, loanToken);
+      }
+    }
+
+    this.logger.info(
+      { seededPairs: pairKeys.size, marketCount: uniqueMarketIds.length },
+      `${this.logTag}Seeded liquidity venue pairs from covered markets`,
+    );
   }
 }

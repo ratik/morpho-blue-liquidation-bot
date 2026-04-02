@@ -32,6 +32,11 @@ export interface LiquidityVenue {
   stopBackgroundSync?(): Promise<void> | void;
 
   /**
+   * Optional hook to register token pairs that should be refreshed in the background.
+   */
+  registerTokenPair?(src: Address, dst: Address): void;
+
+  /**
    * Whether the venue is adapted to the conversion.
    */
   supportsRoute(encoder: ExecutorEncoder, src: Address, dst: Address): Promise<boolean> | boolean;

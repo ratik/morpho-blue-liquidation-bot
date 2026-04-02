@@ -14,7 +14,7 @@ import {
   type ValueOf,
   zeroAddress,
 } from "viem";
-import { getBlockNumber, getContractEvents, multicall, readContract } from "viem/actions";
+import { getContractEvents, multicall, readContract } from "viem/actions";
 
 import { permit2Abi } from "../abis/permit2";
 import {
@@ -32,26 +32,32 @@ type InitializeEvent = Awaited<
   GetContractEventsReturnType<typeof uniswapV4PoolManagerAbi, "Initialize", true>
 >[number];
 type InitializePool = InitializeEvent["args"];
+interface PoolCacheEntry {
+  currency0: Address;
+  currency1: Address;
+  events: InitializeEvent[];
+  lastUpdate: number;
+}
 
 export class UniswapV4Venue implements LiquidityVenue {
   kind = "swap" as const;
   private readonly refreshIntervalMs = 15 * 60 * 1000;
-  private readonly logChunkSize = 50_000n;
-  private poolsByPair: Record<Hex, InitializePool[]> = {};
-  private lastProcessedBlock: bigint | undefined;
+  private poolCreationEventsCache: Record<Hex, PoolCacheEntry> = {};
   private backgroundSyncTimer: ReturnType<typeof setInterval> | undefined;
+  private chainId: number | undefined;
 
-  async init(client: LiquidityVenueClient) {
-    await this.syncPools(client, "startup");
+  init(client: LiquidityVenueClient) {
+    this.chainId = client.chain.id;
   }
 
   startBackgroundSync(client: LiquidityVenueClient) {
+    this.chainId = client.chain.id;
     if (this.backgroundSyncTimer !== undefined || DEPLOYMENTS[client.chain.id] === undefined) {
       return;
     }
 
     this.backgroundSyncTimer = setInterval(() => {
-      void this.syncPools(client, "background").catch(() => undefined);
+      void this.syncPools(client).catch(() => undefined);
     }, this.refreshIntervalMs);
   }
 
@@ -62,14 +68,25 @@ export class UniswapV4Venue implements LiquidityVenue {
     }
   }
 
+  registerTokenPair(src: Address, dst: Address) {
+    const { currency0, currency1 } = this.normalizePair(src, dst);
+    const pairKey = this.poolKey(currency0, currency1);
+
+    this.poolCreationEventsCache[pairKey] ??= {
+      currency0,
+      currency1,
+      events: [],
+      lastUpdate: 0,
+    };
+  }
+
   supportsRoute(
     encoder: ExecutorEncoder,
     _src: Address,
     _dst: Address,
   ): Promise<boolean> | boolean {
-    if (DEPLOYMENTS[encoder.client.chain.id] === undefined) return false;
-    if (this.lastProcessedBlock !== undefined) return true;
-    return this.init(encoder.client).then(() => true);
+    this.chainId ??= encoder.client.chain.id;
+    return DEPLOYMENTS[encoder.client.chain.id] !== undefined;
   }
 
   async convert(encoder: ExecutorEncoder, toConvert: ToConvert) {
@@ -124,8 +141,6 @@ export class UniswapV4Venue implements LiquidityVenue {
       const liquidity = liquidities[i];
       if (!liquidity || liquidity.status === "failure") continue;
       if (liquidity.result > bestLiquidity) {
-        // TODO: could improve this by picking minimum fee tier if there's a set
-        // of similarly-sized pools.
         bestPool = pools[i]!;
         bestLiquidity = liquidity.result;
       }
@@ -139,10 +154,8 @@ export class UniswapV4Venue implements LiquidityVenue {
       hooks: bestPool.hooks,
     };
 
-    // Configure exact swap at the Uniswap v4 Router level
     const v4Planner = new V4Planner();
     v4Planner.addAction(Actions.SWAP_EXACT_IN_SINGLE, [
-      // See https://github.com/Uniswap/sdks/blob/5a1cbfb55d47625afd40f5f0f5e934ed18dfd5e4/sdks/v4-sdk/src/utils/v4Planner.ts#L70
       {
         poolKey: bestPoolKey,
         zeroForOne: currency0 === src,
@@ -151,10 +164,9 @@ export class UniswapV4Venue implements LiquidityVenue {
         hookData: "0x",
       },
     ]);
-    v4Planner.addAction(Actions.SETTLE_ALL, [src, maxUint256]); // [currency, maxAmount]
-    v4Planner.addAction(Actions.TAKE_ALL, [dst, 0n]); // [currency, minAmount]
+    v4Planner.addAction(Actions.SETTLE_ALL, [src, maxUint256]);
+    v4Planner.addAction(Actions.TAKE_ALL, [dst, 0n]);
 
-    // Configure overall actions at the Uniswap Universal Router level
     const routePlanner = new RoutePlanner();
     if (shouldUnwrap) {
       routePlanner.addCommand(CommandType.PERMIT2_TRANSFER_FROM, [
@@ -164,10 +176,8 @@ export class UniswapV4Venue implements LiquidityVenue {
       ]);
       routePlanner.addCommand(CommandType.UNWRAP_WETH, [UniversalRouter.address, 0], false);
     }
-    // See https://github.com/Uniswap/sdks/blob/5a1cbfb55d47625afd40f5f0f5e934ed18dfd5e4/sdks/universal-router-sdk/src/utils/routerCommands.ts#L268
     routePlanner.addCommand(CommandType.V4_SWAP, [v4Planner.finalize()], false);
 
-    // Make sure Permit2 can control our tokens
     try {
       const permit2Allowance = await readContract(encoder.client, {
         abi: erc20Abi,
@@ -184,7 +194,6 @@ export class UniswapV4Venue implements LiquidityVenue {
       );
     }
 
-    // Tell Permit2 that the UniversalRouter can spend our tokens
     const deadline = maxUint48;
     encoder.pushCall(
       deployments.Permit2.address,
@@ -205,10 +214,8 @@ export class UniswapV4Venue implements LiquidityVenue {
         args: [routePlanner.commands as Hex, routePlanner.inputs as Hex[], deadline],
       }),
     );
+
     if (shouldWrap) {
-      // `Executor` contract caps amount at `address(this).balance`, and WETH receive
-      // function falls back to a deposit -- this is the only way to wrap max amount
-      // since placeholders can't specify msg.value.
       encoder.transfer(Native.address, maxUint256);
     }
 
@@ -221,139 +228,104 @@ export class UniswapV4Venue implements LiquidityVenue {
     src: Address,
     dst: Address,
   ) {
-    if (this.lastProcessedBlock === undefined) {
-      await this.init(encoder.client);
+    const deployments = DEPLOYMENTS[encoder.client.chain.id];
+    if (!deployments || poolManager.address !== deployments.PoolManager.address) {
+      const { currency0, currency1 } = this.normalizePair(src, dst);
+      return { currency0, currency1, pools: [] as InitializePool[] };
     }
 
-    // Each pool's currencies are always sorted numerically.
-    const [currency0, currency1] = BigInt(src) < BigInt(dst) ? [src, dst] : [dst, src];
+    const { currency0, currency1 } = this.normalizePair(src, dst);
+    const cacheEntry = this.poolCreationEventsCache[this.poolKey(currency0, currency1)];
+    const pools = (cacheEntry?.events ?? [])
+      .filter((event) => event.args.hooks === zeroAddress)
+      .map((event) => event.args);
 
-    if (poolManager.address !== DEPLOYMENTS[encoder.client.chain.id]?.PoolManager.address) {
-      return { currency0, currency1, pools: [] };
-    }
-
-    return {
-      currency0,
-      currency1,
-      pools: this.poolsByPair[this.poolKey(currency0, currency1)] ?? [],
-    };
+    return { currency0, currency1, pools };
   }
 
-  private async syncPools(client: LiquidityVenueClient, source: "startup" | "background") {
+  private async syncPools(client: LiquidityVenueClient) {
     const deployments = DEPLOYMENTS[client.chain.id];
     if (!deployments) return;
-    logger.debug(
-      { chainId: client.chain.id, chainName: client.chain.name, source },
-      "syncing uniswap v4 pools",
+
+    const knownPairs = Object.entries(this.poolCreationEventsCache);
+    if (knownPairs.length === 0) return;
+
+    let refreshedPairs = 0;
+    let failedPairs = 0;
+
+    await Promise.all(
+      knownPairs.map(async ([pairKey, cacheEntry]) => {
+        try {
+          const poolCreationEvents = await getContractEvents(client, {
+            ...deployments.PoolManager,
+            abi: uniswapV4PoolManagerAbi,
+            eventName: "Initialize",
+            args: { currency0: cacheEntry.currency0, currency1: cacheEntry.currency1 },
+            strict: true,
+          });
+
+          const previousPoolCount = cacheEntry.events.filter(
+            (event) => event.args.hooks === zeroAddress,
+          ).length;
+          const nextPoolCount = poolCreationEvents.filter(
+            (event) => event.args.hooks === zeroAddress,
+          ).length;
+
+          this.poolCreationEventsCache[pairKey as Hex] = {
+            currency0: cacheEntry.currency0,
+            currency1: cacheEntry.currency1,
+            events: poolCreationEvents,
+            lastUpdate: Date.now(),
+          };
+          refreshedPairs += 1;
+
+          logger.debug(
+            {
+              chainId: client.chain.id,
+              chainName: client.chain.name,
+              pairKey,
+              previousPoolCount,
+              poolCount: nextPoolCount,
+              updated: previousPoolCount !== nextPoolCount,
+            },
+            "refreshed uniswap v4 pair cache",
+          );
+        } catch (error) {
+          failedPairs += 1;
+          logger.error(
+            {
+              chainId: client.chain.id,
+              chainName: client.chain.name,
+              pairKey,
+              error: serializeError(error),
+            },
+            "failed to refresh uniswap v4 pair cache",
+          );
+        }
+      }),
     );
-    const latestBlock = await getBlockNumber(client);
-    const fromBlock =
-      this.lastProcessedBlock === undefined
-        ? (deployments.PoolManager.fromBlock ?? 0n)
-        : this.lastProcessedBlock + 1n;
 
-    if (fromBlock > latestBlock) {
-      this.lastProcessedBlock = latestBlock;
-      return;
-    }
-
-    logger.debug(
+    logger.info(
       {
         chainId: client.chain.id,
         chainName: client.chain.name,
-        fromBlock,
-        toBlock: latestBlock,
-        source,
+        knownPairs: knownPairs.length,
+        refreshedPairs,
+        failedPairs,
       },
-      "fetching uniswap v4 pool events",
+      "completed uniswap v4 background refresh",
     );
-    try {
-      let cursor = fromBlock;
-      let newPoolCount = 0;
-
-      while (cursor <= latestBlock) {
-        logger.debug(
-          {
-            chainId: client.chain.id,
-            chainName: client.chain.name,
-            fromBlock: cursor,
-            toBlock:
-              cursor + this.logChunkSize - 1n > latestBlock
-                ? latestBlock
-                : cursor + this.logChunkSize - 1n,
-            source,
-          },
-          "fetching uniswap v4 pool events chunk",
-        );
-
-        const toBlock =
-          cursor + this.logChunkSize - 1n > latestBlock
-            ? latestBlock
-            : cursor + this.logChunkSize - 1n;
-
-        const events = await getContractEvents(client, {
-          ...deployments.PoolManager,
-          abi: uniswapV4PoolManagerAbi,
-          eventName: "Initialize",
-          strict: true,
-          fromBlock: cursor,
-          toBlock,
-        });
-
-        newPoolCount += this.addPools(events);
-        cursor = toBlock + 1n;
-      }
-
-      this.lastProcessedBlock = latestBlock;
-
-      logger.info(
-        {
-          chainId: client.chain.id,
-          chainName: client.chain.name,
-          fromBlock,
-          toBlock: latestBlock,
-          poolsIndexed: newPoolCount,
-          source,
-        },
-        "refreshed uniswap v4 pool cache",
-      );
-    } catch (error) {
-      logger.error(
-        {
-          chainId: client.chain.id,
-          chainName: client.chain.name,
-          fromBlock,
-          toBlock: latestBlock,
-          source,
-          error: serializeError(error),
-        },
-        "failed to refresh uniswap v4 pool cache",
-      );
-      throw new Error(
-        `(UniswapV4) Error fetching pools: ${error instanceof Error ? error.message : String(error)}`,
-      );
-    }
   }
 
-  private addPools(events: InitializeEvent[]) {
-    let added = 0;
+  private normalizePair(src: Address, dst: Address) {
+    const nativeAddress =
+      this.chainId !== undefined ? DEPLOYMENTS[this.chainId]?.Native.address : undefined;
+    const normalizedSrc = nativeAddress !== undefined && src === nativeAddress ? zeroAddress : src;
+    const normalizedDst = nativeAddress !== undefined && dst === nativeAddress ? zeroAddress : dst;
 
-    for (const event of events) {
-      const pool = event.args;
-      if (pool.hooks !== zeroAddress) continue;
-
-      const pairKey = this.poolKey(pool.currency0, pool.currency1);
-      const existingPools = this.poolsByPair[pairKey] ?? [];
-      if (existingPools.some((existingPool) => existingPool.id === pool.id)) {
-        continue;
-      }
-
-      existingPools.push(pool);
-      this.poolsByPair[pairKey] = existingPools;
-      added += 1;
-    }
-
-    return added;
+    return BigInt(normalizedSrc) < BigInt(normalizedDst)
+      ? { currency0: getAddress(normalizedSrc), currency1: getAddress(normalizedDst) }
+      : { currency0: getAddress(normalizedDst), currency1: getAddress(normalizedSrc) };
   }
 
   private poolKey(currency0: Address, currency1: Address) {
