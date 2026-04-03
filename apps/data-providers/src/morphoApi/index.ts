@@ -153,22 +153,22 @@ export class MorphoApiDataProvider implements DataProvider {
     vaultAddress: Address,
   ): Promise<Hex[]> {
     try {
-      const withdrawQueueLength = await readContractWithRpcStats(client, "vault_market_fetch", {
+      const withdrawQueueLength = (await readContractWithRpcStats(client, "vault_market_fetch", {
         address: vaultAddress,
         abi: metaMorphoAbi,
         functionName: "withdrawQueueLength",
-      });
+      })) as bigint;
 
       const indices = Array.from({ length: Number(withdrawQueueLength) }, (_, i) => BigInt(i));
 
       return await Promise.all(
         indices.map(async (index) => {
-          const marketId = await readContractWithRpcStats(client, "vault_market_fetch", {
+          const marketId = (await readContractWithRpcStats(client, "vault_market_fetch", {
             address: vaultAddress,
             abi: metaMorphoAbi,
             functionName: "withdrawQueue",
             args: [index],
-          });
+          })) as Hex;
           return marketId;
         }),
       );

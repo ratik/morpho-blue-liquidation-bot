@@ -333,7 +333,7 @@ export class HyperIndexDataProvider implements DataProvider {
               abi: oracleAbi,
               functionName: "price",
             });
-            oraclePrices.set(oracle, price);
+            oraclePrices.set(oracle, price as bigint);
           } catch {
             oraclePrices.set(oracle, undefined);
           }
