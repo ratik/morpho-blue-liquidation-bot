@@ -86,6 +86,12 @@ export const launchBot = async (config: ChainConfig, dataProvider: DataProvider)
     ? config.pricers.map((pricerName) => createPricer(pricerName))
     : undefined;
 
+  if (pricers) {
+    for (const pricer of pricers) {
+      await pricer.init?.(client);
+    }
+  }
+
   // FlASHBOTS
 
   let flashbotAccount = undefined;
@@ -130,6 +136,35 @@ export const launchBot = async (config: ChainConfig, dataProvider: DataProvider)
   };
 
   const bot = new LiquidationBot(inputs);
+  const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+  await bot.warmupData();
+
+  const PRICE_REFRESH_INTERVAL_MS = 30_000;
+  logger.info(
+    { logTag, priceRefreshIntervalMs: PRICE_REFRESH_INTERVAL_MS },
+    `${logTag}Pricer refresh configured`,
+  );
+
+  const refreshPricerCaches = async () => {
+    try {
+      await bot.refreshPricerCaches();
+    } catch (error) {
+      logger.error(
+        { error: serializeError(error), logTag },
+        `${logTag}failed to refresh pricer caches`,
+      );
+    }
+  };
+
+  const startPriceRefreshLoop = async () => {
+    while (true) {
+      await sleep(PRICE_REFRESH_INTERVAL_MS);
+      await refreshPricerCaches();
+    }
+  };
+
+  void startPriceRefreshLoop();
 
   const pollingIntervalMs = config.pollingIntervalMs ?? 10_000;
   logger.info({ logTag, pollingIntervalMs }, `${logTag}Polling configured`);
@@ -156,8 +191,6 @@ export const launchBot = async (config: ChainConfig, dataProvider: DataProvider)
 
     isRunning = false;
   };
-
-  const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
   const startPolling = async () => {
     await runCycle();

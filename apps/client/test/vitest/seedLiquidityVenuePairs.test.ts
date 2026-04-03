@@ -1,4 +1,5 @@
 import type { LiquidityVenue } from "@morpho-blue-liquidation-bot/liquidity-venues";
+import type { Pricer } from "@morpho-blue-liquidation-bot/pricers";
 import type { Address, Hex } from "viem";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -23,26 +24,33 @@ const marketB = "0x0000000000000000000000000000000000000000000000000000000000000
 
 interface SeedLiquidityVenuePairsContext {
   liquidityVenues: LiquidityVenue[];
+  pricers?: Pricer[];
   coveredMarkets: Hex[];
   client: object;
   chainAddresses: { morpho: Address };
   logger: { info: ReturnType<typeof vi.fn>; error: ReturnType<typeof vi.fn> };
   logTag: string;
+  wNative: Address;
 }
 
-describe("seedLiquidityVenuePairs", () => {
+describe("seedMarketDerivedCaches", () => {
   beforeEach(() => {
     readContractMock.mockReset();
   });
 
-  it("registers collateral to loan pairs for covered markets", async () => {
+  it("registers collateral to loan pairs and pricer assets for covered markets", async () => {
     const registerTokenPair = vi.fn();
+    const registerAsset = vi.fn();
     const venue = {
       kind: "swap",
       supportsRoute: vi.fn(),
       convert: vi.fn(),
       registerTokenPair,
     } as unknown as LiquidityVenue;
+    const pricer = {
+      price: vi.fn(),
+      registerAsset,
+    } as unknown as Pricer;
 
     readContractMock
       .mockResolvedValueOnce([loan, collateral, collateral, collateral, 0n])
@@ -50,20 +58,26 @@ describe("seedLiquidityVenuePairs", () => {
 
     const context: SeedLiquidityVenuePairsContext = {
       liquidityVenues: [venue],
+      pricers: [pricer],
       coveredMarkets: [marketA, marketB],
       client: {},
       chainAddresses: { morpho: collateral },
       logger: { info: vi.fn(), error: vi.fn() },
       logTag: "[test] ",
+      wNative: "0x4200000000000000000000000000000000000006" as Address,
     };
 
     await (
       LiquidationBot.prototype as unknown as {
-        seedLiquidityVenuePairs: (this: SeedLiquidityVenuePairsContext) => Promise<void>;
+        seedMarketDerivedCaches: (this: SeedLiquidityVenuePairsContext) => Promise<void>;
       }
-    ).seedLiquidityVenuePairs.call(context);
+    ).seedMarketDerivedCaches.call(context);
 
     expect(registerTokenPair).toHaveBeenCalledTimes(1);
     expect(registerTokenPair).toHaveBeenCalledWith(collateral, loan);
+    expect(registerAsset).toHaveBeenCalledTimes(3);
+    expect(registerAsset).toHaveBeenCalledWith(collateral);
+    expect(registerAsset).toHaveBeenCalledWith(loan);
+    expect(registerAsset).toHaveBeenCalledWith(context.wNative);
   });
 });

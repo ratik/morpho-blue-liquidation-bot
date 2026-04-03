@@ -121,6 +121,31 @@ export class LiquidationBot {
     ]);
   }
 
+  async warmupData() {
+    this.logger.info({}, `Warming up markets`);
+    await this.fetchMarkets();
+    this.logger.info({}, `Warming up pricer caches`);
+    await this.refreshPricerCaches();
+    this.logger.info({}, `Warming completed`);
+  }
+
+  async refreshPricerCaches() {
+    if (this.pricers === undefined || this.pricers.length === 0) return;
+
+    await Promise.all(
+      this.pricers.map(async (pricer) => {
+        try {
+          await pricer.refreshRegisteredAssets?.(this.client);
+        } catch (error) {
+          this.logger.error(
+            { error: serializeError(error) },
+            `${this.logTag}Failed to refresh pricer cache`,
+          );
+        }
+      }),
+    );
+  }
+
   private async liquidate(position: AccrualPosition) {
     const marketParams = position.market.params;
     const seizableCollateral = position.seizableCollateral ?? 0n;
@@ -434,7 +459,10 @@ export class LiquidationBot {
     let price: number | undefined = undefined;
 
     for (const pricer of pricers) {
-      price = await pricer.price(this.client, asset);
+      price =
+        pricer.getCachedPrice !== undefined
+          ? await pricer.getCachedPrice(this.client, asset)
+          : await pricer.price(this.client, asset);
       if (price !== undefined) break;
     }
 
@@ -523,17 +551,26 @@ export class LiquidationBot {
     );
 
     this.coveredMarkets = [...whitelistedMarketsFromVaults, ...this.additionalMarketsWhitelist];
-    await this.seedLiquidityVenuePairs();
+    await this.seedMarketDerivedCaches();
   }
 
-  private async seedLiquidityVenuePairs() {
+  private async seedMarketDerivedCaches() {
     const pairAwareVenues = this.liquidityVenues.filter(
       (
         venue,
       ): venue is typeof venue & { registerTokenPair: (src: Address, dst: Address) => void } =>
         venue.registerTokenPair !== undefined,
     );
-    if (pairAwareVenues.length === 0 || this.coveredMarkets.length === 0) return;
+    const assetAwarePricers =
+      this.pricers?.filter(
+        (pricer): pricer is typeof pricer & { registerAsset: (asset: Address) => void } =>
+          pricer.registerAsset !== undefined,
+      ) ?? [];
+    if (
+      (pairAwareVenues.length === 0 && assetAwarePricers.length === 0) ||
+      this.coveredMarkets.length === 0
+    )
+      return;
 
     const uniqueMarketIds = [...new Set(this.coveredMarkets)];
     const results = await Promise.allSettled(
@@ -548,17 +585,20 @@ export class LiquidationBot {
     );
 
     const pairKeys = new Set<string>();
+    const assetSet = new Set<Address>(assetAwarePricers.length > 0 ? [this.wNative] : []);
     for (const result of results) {
       if (result.status === "rejected") {
         this.logger.error(
           { error: serializeError(result.reason) },
-          `${this.logTag}Failed to fetch market params while seeding liquidity venue pairs`,
+          `${this.logTag}Failed to fetch market params while seeding market-derived caches`,
         );
         continue;
       }
 
       const [loanToken, collateralToken] = result.value;
       pairKeys.add(`${collateralToken}:${loanToken}`);
+      assetSet.add(loanToken);
+      assetSet.add(collateralToken);
     }
 
     for (const pairKey of pairKeys) {
@@ -568,9 +608,24 @@ export class LiquidationBot {
       }
     }
 
-    this.logger.info(
-      { seededPairs: pairKeys.size, marketCount: uniqueMarketIds.length },
-      `${this.logTag}Seeded liquidity venue pairs from covered markets`,
-    );
+    for (const asset of assetSet) {
+      for (const pricer of assetAwarePricers) {
+        pricer.registerAsset(asset);
+      }
+    }
+
+    if (pairAwareVenues.length > 0) {
+      this.logger.info(
+        { seededPairs: pairKeys.size, marketCount: uniqueMarketIds.length },
+        `${this.logTag}Seeded liquidity venue pairs from covered markets`,
+      );
+    }
+
+    if (assetAwarePricers.length > 0) {
+      this.logger.info(
+        { seededAssets: assetSet.size, marketCount: uniqueMarketIds.length },
+        `${this.logTag}Seeded pricer assets from covered markets`,
+      );
+    }
   }
 }
