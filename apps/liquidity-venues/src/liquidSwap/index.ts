@@ -77,11 +77,11 @@ export class LiquidSwapVenue implements LiquidityVenue {
 
     const chainDecimals = this.assetsDecimals[chainId];
     if (chainDecimals[asset] === undefined) {
-      chainDecimals[asset] = await readContractWithRpcStats(client, "liquidity_routing", {
+      chainDecimals[asset] = (await readContractWithRpcStats(client, "liquidity_routing", {
         address: asset,
         abi: erc20Abi,
         functionName: "decimals",
-      });
+      })) as number;
     }
     return chainDecimals[asset];
   }

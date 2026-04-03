@@ -180,12 +180,16 @@ export class UniswapV4Venue implements LiquidityVenue {
     routePlanner.addCommand(CommandType.V4_SWAP, [v4Planner.finalize()], false);
 
     try {
-      const permit2Allowance = await readContractWithRpcStats(encoder.client, "liquidity_routing", {
-        abi: erc20Abi,
-        address: rawSrc,
-        functionName: "allowance",
-        args: [encoder.address, deployments.Permit2.address],
-      });
+      const permit2Allowance = (await readContractWithRpcStats(
+        encoder.client,
+        "liquidity_routing",
+        {
+          abi: erc20Abi,
+          address: rawSrc,
+          functionName: "allowance",
+          args: [encoder.address, deployments.Permit2.address],
+        },
+      )) as bigint;
       if (permit2Allowance < srcAmount) {
         encoder.erc20Approve(rawSrc, deployments.Permit2.address, maxUint256);
       }

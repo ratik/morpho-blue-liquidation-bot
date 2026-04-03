@@ -15,11 +15,11 @@ export class Erc4626 implements LiquidityVenue {
       return this.underlying[src] !== zeroAddress;
     }
     try {
-      const underlying = await readContractWithRpcStats(encoder.client, "liquidity_routing", {
+      const underlying = (await readContractWithRpcStats(encoder.client, "liquidity_routing", {
         address: src,
         abi: erc4626Abi,
         functionName: "asset",
-      });
+      })) as Address;
       this.underlying[src] = underlying;
       return underlying !== zeroAddress;
     } catch {
@@ -38,12 +38,12 @@ export class Erc4626 implements LiquidityVenue {
     }
 
     try {
-      const withdrawAmount = await readContractWithRpcStats(encoder.client, "liquidity_routing", {
+      const withdrawAmount = (await readContractWithRpcStats(encoder.client, "liquidity_routing", {
         address: src,
         abi: erc4626Abi,
         functionName: "previewRedeem",
         args: [srcAmount],
-      });
+      })) as bigint;
       if (withdrawAmount === 0n) return toConvert;
 
       encoder.erc4626Redeem(src, srcAmount, encoder.address, encoder.address);

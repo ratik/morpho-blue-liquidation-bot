@@ -20,6 +20,11 @@ import type { LiquidityVenue } from "../liquidityVenue";
 import { readContractWithRpcStats } from "../rpcActions";
 import type { ToConvert } from "../types";
 
+interface LiquidityResult {
+  pool: Address;
+  amount: bigint;
+}
+
 export class UniswapV3Venue implements LiquidityVenue {
   kind = "swap" as const;
   private pools: Record<Address, Record<Address, Address[]>> = {};
@@ -46,12 +51,12 @@ export class UniswapV3Venue implements LiquidityVenue {
         pools.map(async (pool) => {
           return {
             pool,
-            amount: await readContractWithRpcStats(encoder.client, "liquidity_routing", {
+            amount: (await readContractWithRpcStats(encoder.client, "liquidity_routing", {
               address: pool,
               abi: uniswapV3PoolAbi,
               functionName: "liquidity",
-            }),
-          };
+            })) as bigint,
+          } satisfies LiquidityResult;
         }),
       );
 
@@ -140,7 +145,7 @@ export class UniswapV3Venue implements LiquidityVenue {
             }),
           ),
         )
-      ).filter((pool) => pool !== zeroAddress);
+      ).filter((pool): pool is Address => (pool as Address) !== zeroAddress);
 
       if (this.pools[src]?.[dst] === undefined) {
         this.pools[src] = { ...this.pools[src], [dst]: newPools };

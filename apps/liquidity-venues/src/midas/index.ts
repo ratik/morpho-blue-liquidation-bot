@@ -254,7 +254,7 @@ export class MidasVenue implements LiquidityVenue {
           allowance: tokenOutConfig[2],
           stable: tokenOutConfig[3],
         },
-        tokenOutDecimals: BigInt(tokenOutDecimals),
+        tokenOutDecimals: BigInt(tokenOutDecimals as number),
         minAmount,
         instantFee,
         instantDailyLimit,
@@ -272,11 +272,11 @@ export class MidasVenue implements LiquidityVenue {
   }
 
   async getMidasRate(dataFeed: Address, encoder: ExecutorEncoder) {
-    return readContractWithRpcStats(encoder.client, "liquidity_routing", {
+    return (await readContractWithRpcStats(encoder.client, "liquidity_routing", {
       address: dataFeed,
       abi: midasDataFeedAbi,
       functionName: "getDataInBase18",
       args: [],
-    });
+    })) as bigint;
   }
 }
