@@ -31,6 +31,8 @@ interface SeedLiquidityVenuePairsContext {
   logTag: string;
   wNative: Address;
   registeredPricedAssets: Set<Address>;
+  decimalsCache: Map<Address, number>;
+  ensureDecimalsCached: () => Promise<void>;
 }
 
 describe("seedMarketDerivedCaches", () => {
@@ -61,6 +63,8 @@ describe("seedMarketDerivedCaches", () => {
       logTag: "[test] ",
       wNative: "0x4200000000000000000000000000000000000006" as Address,
       registeredPricedAssets: new Set(),
+      decimalsCache: new Map(),
+      ensureDecimalsCached: vi.fn().mockResolvedValue(undefined),
     };
 
     await (
@@ -74,5 +78,6 @@ describe("seedMarketDerivedCaches", () => {
     expect([...context.registeredPricedAssets]).toEqual(
       expect.arrayContaining([collateral, loan, context.wNative]),
     );
+    expect(context.ensureDecimalsCached).toHaveBeenCalledTimes(1);
   });
 });

@@ -85,6 +85,7 @@ export class LiquidationBot {
   private alwaysRealizeBadDebt: boolean;
   private registeredPricedAssets: Set<Address>;
   private priceCache: Map<Address, { price: number; updatedAt: number }>;
+  private decimalsCache: Map<Address, number>;
 
   constructor(inputs: LiquidationBotInputs) {
     this.logger = createLogger({
@@ -111,6 +112,7 @@ export class LiquidationBot {
     this.alwaysRealizeBadDebt = inputs.alwaysRealizeBadDebt;
     this.registeredPricedAssets = new Set();
     this.priceCache = new Map();
+    this.decimalsCache = new Map([[this.wNative, 18]]);
   }
 
   async run() {
@@ -128,9 +130,36 @@ export class LiquidationBot {
   async warmupData() {
     this.logger.info({}, `Warming up markets`);
     await this.fetchMarkets();
+    this.logger.info({}, `Warming up bot decimals cache`);
+    await this.ensureDecimalsCached();
     this.logger.info({}, `Warming up bot price cache`);
     await this.refreshPriceCache();
     this.logger.info({}, `Warming completed`);
+  }
+
+  async ensureDecimalsCached() {
+    for (const asset of this.registeredPricedAssets) {
+      if (this.decimalsCache.has(asset)) continue;
+
+      if (asset === this.wNative) {
+        this.decimalsCache.set(asset, 18);
+        continue;
+      }
+
+      try {
+        const decimals = await readContract(this.client, {
+          address: asset,
+          abi: erc20Abi,
+          functionName: "decimals",
+        });
+        this.decimalsCache.set(asset, decimals);
+      } catch (error) {
+        this.logger.error(
+          { error: serializeError(error), asset },
+          `${this.logTag}Failed to warm token decimals`,
+        );
+      }
+    }
   }
 
   async refreshPriceCache() {
@@ -476,14 +505,8 @@ export class LiquidationBot {
 
     if (price === undefined) return undefined;
 
-    const decimals =
-      asset === this.wNative
-        ? 18
-        : await readContract(this.client, {
-            address: asset,
-            abi: erc20Abi,
-            functionName: "decimals",
-          });
+    const decimals = this.decimalsCache.get(asset);
+    if (decimals === undefined) return undefined;
 
     return parseFloat(formatUnits(amount, decimals)) * price;
   }
@@ -612,6 +635,7 @@ export class LiquidationBot {
     }
 
     this.registeredPricedAssets = assetSet;
+    await this.ensureDecimalsCached();
 
     if (pairAwareVenues.length > 0) {
       this.logger.info(
