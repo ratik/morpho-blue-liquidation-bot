@@ -5,10 +5,19 @@ import type { Pricer } from "../pricer";
 
 const logger = createLogger({ component: "morpho-api-pricer" });
 
+type CoinKey = `${number}:${Address}`;
+
+interface CachedPrice {
+  price: number | undefined;
+  fetchTimestamp: number;
+}
+
 export class MorphoApi implements Pricer {
   private readonly API_URL = "https://blue-api.morpho.org/graphql";
+  private readonly CACHE_TIMEOUT_MS = 30_000;
   private supportedChains: number[] = [];
   private initialized = false;
+  private priceCache = new Map<CoinKey, CachedPrice>();
 
   async price(client: Client<Transport, Chain, Account>, asset: Address) {
     if (!this.initialized) {
@@ -16,6 +25,12 @@ export class MorphoApi implements Pricer {
     }
 
     if (!this.supportedChains.includes(client.chain.id)) return;
+
+    const coinKey: CoinKey = `${client.chain.id}:${asset}`;
+    const cachedPrice = this.priceCache.get(coinKey);
+    if (cachedPrice && Date.now() - cachedPrice.fetchTimestamp < this.CACHE_TIMEOUT_MS) {
+      return cachedPrice.price;
+    }
 
     try {
       const response = await fetch(this.API_URL, {
@@ -30,14 +45,21 @@ export class MorphoApi implements Pricer {
 
       const items = data.data.assets.items;
 
-      const priceUsd = items.find((item) => item.address === asset)?.priceUsd ?? null;
+      const priceUsd = items.find((item) => item.address === asset)?.priceUsd ?? undefined;
+      this.priceCache.set(coinKey, {
+        price: priceUsd,
+        fetchTimestamp: Date.now(),
+      });
 
-      return priceUsd ?? undefined;
+      return priceUsd;
     } catch (error) {
       logger.error(
         { error: serializeError(error), asset, chainId: client.chain.id },
         "Error fetching Morpho API price",
       );
+      if (cachedPrice && Date.now() - cachedPrice.fetchTimestamp < this.CACHE_TIMEOUT_MS) {
+        return cachedPrice.price;
+      }
       return undefined;
     }
   }

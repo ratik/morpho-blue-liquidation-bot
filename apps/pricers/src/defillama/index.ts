@@ -24,7 +24,7 @@ interface DefiLlamaPriceResponse {
 
 export class DefiLlamaPricer implements Pricer {
   private priceCache = new Map<CoinKey, CachedPrice>();
-  private readonly cacheTimeoutMs: number = 10_000; // 10 seconds
+  private readonly cacheTimeoutMs: number = 30_000; // 30 seconds
 
   async price(client: Client<Transport, Chain, Account>, asset: Address) {
     const cacheKey = this.getCoinKey(client, asset);
