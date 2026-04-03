@@ -14,7 +14,7 @@ import {
   type ValueOf,
   zeroAddress,
 } from "viem";
-import { getContractEvents, multicall, readContract } from "viem/actions";
+import { getContractEvents, multicall } from "viem/actions";
 
 import { permit2Abi } from "../abis/permit2";
 import {
@@ -24,6 +24,7 @@ import {
 } from "../abis/uniswapV4";
 import type { LiquidityVenue, LiquidityVenueClient } from "../liquidityVenue";
 import { createLogger, serializeError } from "../logger";
+import { readContractWithRpcStats } from "../rpcActions";
 import type { ToConvert } from "../types";
 
 const logger = createLogger({ component: "uniswap-v4-venue" });
@@ -179,7 +180,7 @@ export class UniswapV4Venue implements LiquidityVenue {
     routePlanner.addCommand(CommandType.V4_SWAP, [v4Planner.finalize()], false);
 
     try {
-      const permit2Allowance = await readContract(encoder.client, {
+      const permit2Allowance = await readContractWithRpcStats(encoder.client, "liquidity_routing", {
         abi: erc20Abi,
         address: rawSrc,
         functionName: "allowance",

@@ -1,10 +1,10 @@
 import { LIQUID_SWAP_SUPPORTED_NETWORKS } from "@morpho-blue-liquidation-bot/config";
 import { ExecutorEncoder } from "executooor-viem";
 import { Account, Address, Chain, Client, erc20Abi, Hex, parseUnits, Transport } from "viem";
-import { readContract } from "viem/actions";
 
 import { LiquidityVenue } from "../liquidityVenue";
 import { createLogger, serializeError } from "../logger";
+import { readContractWithRpcStats } from "../rpcActions";
 import { ToConvert } from "../types";
 
 import { SwapRouteV2Response } from "./types";
@@ -77,7 +77,7 @@ export class LiquidSwapVenue implements LiquidityVenue {
 
     const chainDecimals = this.assetsDecimals[chainId];
     if (chainDecimals[asset] === undefined) {
-      chainDecimals[asset] = await readContract(client, {
+      chainDecimals[asset] = await readContractWithRpcStats(client, "liquidity_routing", {
         address: asset,
         abi: erc20Abi,
         functionName: "decimals",

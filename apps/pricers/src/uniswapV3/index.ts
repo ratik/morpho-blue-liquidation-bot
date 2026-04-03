@@ -15,11 +15,11 @@ import {
   fromHex,
   zeroAddress,
 } from "viem";
-import { readContract } from "viem/actions";
 
 import { uniswapV3FactoryAbi, uniswapV3PoolAbi } from "../abis/uniswapV3";
 import { createLogger, serializeError } from "../logger";
 import type { Pricer } from "../pricer";
+import { readContractWithRpcStats } from "../rpcActions";
 
 const logger = createLogger({ component: "uniswapv3-pricer" });
 
@@ -49,7 +49,7 @@ export class UniswapV3Pricer implements Pricer {
         pools.map(async (pool) => {
           return {
             pool,
-            amount: await readContract(client, {
+            amount: await readContractWithRpcStats(client, "price_refresh", {
               address: pool,
               abi: uniswapV3PoolAbi,
               functionName: "liquidity",
@@ -72,7 +72,7 @@ export class UniswapV3Pricer implements Pricer {
       const token1 = token0 === asset ? usdReference : asset;
 
       const [slot0, token0Decimals, token1Decimals] = await Promise.all([
-        readContract(client, {
+        readContractWithRpcStats(client, "price_refresh", {
           address: biggestPool,
           abi: uniswapV3PoolAbi,
           functionName: "slot0",
@@ -112,7 +112,7 @@ export class UniswapV3Pricer implements Pricer {
       const newPools = (
         await Promise.all(
           FEE_TIERS.map(async (fee) =>
-            readContract(client, {
+            readContractWithRpcStats(client, "price_refresh", {
               address: factoryAddress,
               abi: uniswapV3FactoryAbi,
               functionName: "getPool",
@@ -138,7 +138,7 @@ export class UniswapV3Pricer implements Pricer {
 
   private async getDecimals(client: Client<Transport, Chain, Account>, asset: Address) {
     if (this.decimals[asset] !== undefined) return this.decimals[asset];
-    const decimals = await readContract(client, {
+    const decimals = await readContractWithRpcStats(client, "price_refresh", {
       address: asset,
       abi: erc20Abi,
       functionName: "decimals",

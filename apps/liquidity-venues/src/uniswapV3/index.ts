@@ -14,10 +14,10 @@ import {
   fromHex,
   zeroAddress,
 } from "viem";
-import { readContract } from "viem/actions";
 
 import { uniswapV3FactoryAbi, uniswapV3PoolAbi } from "../abis/uniswapV3";
 import type { LiquidityVenue } from "../liquidityVenue";
+import { readContractWithRpcStats } from "../rpcActions";
 import type { ToConvert } from "../types";
 
 export class UniswapV3Venue implements LiquidityVenue {
@@ -46,7 +46,7 @@ export class UniswapV3Venue implements LiquidityVenue {
         pools.map(async (pool) => {
           return {
             pool,
-            amount: await readContract(encoder.client, {
+            amount: await readContractWithRpcStats(encoder.client, "liquidity_routing", {
               address: pool,
               abi: uniswapV3PoolAbi,
               functionName: "liquidity",
@@ -132,7 +132,7 @@ export class UniswapV3Venue implements LiquidityVenue {
       const newPools = (
         await Promise.all(
           FEE_TIERS.map(async (fee) =>
-            readContract(encoder.client, {
+            readContractWithRpcStats(encoder.client, "liquidity_routing", {
               address: factoryAddress,
               abi: uniswapV3FactoryAbi,
               functionName: "getPool",

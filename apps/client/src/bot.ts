@@ -25,16 +25,16 @@ import {
   type Transport,
   type WalletClient,
 } from "viem";
-import {
-  getBlockNumber,
-  getGasPrice,
-  readContract,
-  simulateCalls,
-  writeContract,
-} from "viem/actions";
 
 import { morphoBlueAbi } from "./abis/morpho/morphoBlue";
 import { createLogger, type AppLogger, serializeError } from "./logger";
+import {
+  getBlockNumberWithRpcStats,
+  getGasPriceWithRpcStats,
+  readContractWithRpcStats,
+  simulateCallsWithRpcStats,
+  writeContractWithRpcStats,
+} from "./rpcActions";
 import {
   MarketsFetchingCooldownMechanism,
   PositionLiquidationCooldownMechanism,
@@ -147,7 +147,7 @@ export class LiquidationBot {
       }
 
       try {
-        const decimals = await readContract(this.client, {
+        const decimals = await readContractWithRpcStats(this.client, "decimals_warmup", {
           address: asset,
           abi: erc20Abi,
           functionName: "decimals",
@@ -334,7 +334,7 @@ export class LiquidationBot {
     } as const;
 
     const [{ results }, gasPrice] = await Promise.all([
-      simulateCalls(this.simulationClient, {
+      simulateCallsWithRpcStats(this.simulationClient, "tx_simulation", {
         account: this.client.account.address,
         calls: [
           {
@@ -352,7 +352,7 @@ export class LiquidationBot {
           },
         ],
       }),
-      getGasPrice(this.client),
+      getGasPriceWithRpcStats(this.client, "gas_price"),
     ]);
 
     if (results[1].status !== "success") {
@@ -399,12 +399,15 @@ export class LiquidationBot {
 
       await Flashbots.sendRawBundle(
         signedBundle,
-        (await getBlockNumber(this.client)) + 1n,
+        (await getBlockNumberWithRpcStats(this.client, "block_number")) + 1n,
         this.flashbotAccount,
       );
       return true;
     } else {
-      await writeContract(this.client, { address: encoder.address, ...functionData });
+      await writeContractWithRpcStats(this.client, "tx_submit", {
+        address: encoder.address,
+        ...functionData,
+      });
     }
 
     return true;
@@ -601,7 +604,7 @@ export class LiquidationBot {
     const uniqueMarketIds = [...new Set(this.coveredMarkets)];
     const results = await Promise.allSettled(
       uniqueMarketIds.map((marketId) =>
-        readContract(this.client, {
+        readContractWithRpcStats(this.client, "market_seed", {
           address: this.chainAddresses.morpho,
           abi: morphoBlueAbi,
           functionName: "idToMarketParams",

@@ -28,7 +28,7 @@ describe("price cache usage", () => {
     const pricer = { price } as unknown as Pricer;
 
     const context = {
-      client: {},
+      client: { chain: { id: 8453 } },
       wNative: "0x4200000000000000000000000000000000000006" as Address,
       priceCache: new Map([[asset, { price: 100, updatedAt: Date.now() }]]),
       decimalsCache: new Map([[asset, 18]]),
@@ -52,7 +52,7 @@ describe("price cache usage", () => {
 
   it("computes median price and preserves the previous value when refresh yields no prices", async () => {
     const context = {
-      client: {},
+      client: { chain: { id: 8453 } },
       pricers: [
         { price: vi.fn().mockResolvedValue(120) },
         { price: vi.fn().mockResolvedValue(undefined) },
@@ -95,7 +95,7 @@ describe("price cache usage", () => {
     readContractMock.mockResolvedValueOnce(6).mockResolvedValueOnce(8);
 
     const context = {
-      client: {},
+      client: { chain: { id: 8453 } },
       wNative,
       registeredPricedAssets: new Set<Address>([assetA, assetB, wNative]),
       decimalsCache: new Map<Address, number>(),
@@ -128,7 +128,7 @@ describe("price cache usage", () => {
     const pricer = { price } as unknown as Pricer;
 
     const context = {
-      client: {},
+      client: { chain: { id: 8453 } },
       wNative: "0x4200000000000000000000000000000000000006" as Address,
       priceCache: new Map([[asset, { price: 100, updatedAt: Date.now() }]]),
       decimalsCache: new Map<Address, number>(),

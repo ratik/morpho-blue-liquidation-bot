@@ -14,6 +14,11 @@ import { privateKeyToAccount } from "viem/accounts";
 import { LiquidationBot, type LiquidationBotInputs } from "./bot";
 import { createLogger, serializeError } from "./logger";
 import {
+  registerRpcStatsCollector,
+  RpcStatsCollector,
+  startRpcStatsReportingLoop,
+} from "./rpcStats";
+import {
   MarketsFetchingCooldownMechanism,
   PositionLiquidationCooldownMechanism,
 } from "./utils/cooldownMechanisms";
@@ -25,7 +30,14 @@ export const launchBot = async (config: ChainConfig, dataProvider: DataProvider)
     chainId: config.chain.id,
     chainName: config.chain.name,
   });
+  const rpcStatsLogger = createLogger({
+    component: "rpc-stats",
+    chainId: config.chain.id,
+    chainName: config.chain.name,
+  });
   logger.info({ logTag }, `${logTag}Starting up`);
+  const rpcStatsCollector = new RpcStatsCollector();
+  registerRpcStatsCollector(config.chain.id, rpcStatsCollector);
 
   const client = createWalletClient({
     chain: config.chain,
@@ -133,6 +145,13 @@ export const launchBot = async (config: ChainConfig, dataProvider: DataProvider)
   const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
   await bot.warmupData();
+
+  startRpcStatsReportingLoop({
+    chainId: config.chain.id,
+    chainName: config.chain.name,
+    logger: rpcStatsLogger,
+    collector: rpcStatsCollector,
+  });
 
   const PRICE_REFRESH_INTERVAL_MS = 30_000;
   logger.info(

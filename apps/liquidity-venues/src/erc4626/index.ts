@@ -1,8 +1,8 @@
 import type { ExecutorEncoder } from "executooor-viem";
 import { erc4626Abi, zeroAddress, type Address } from "viem";
-import { readContract } from "viem/actions";
 
 import type { LiquidityVenue } from "../liquidityVenue";
+import { readContractWithRpcStats } from "../rpcActions";
 import type { ToConvert } from "../types";
 
 export class Erc4626 implements LiquidityVenue {
@@ -15,7 +15,7 @@ export class Erc4626 implements LiquidityVenue {
       return this.underlying[src] !== zeroAddress;
     }
     try {
-      const underlying = await readContract(encoder.client, {
+      const underlying = await readContractWithRpcStats(encoder.client, "liquidity_routing", {
         address: src,
         abi: erc4626Abi,
         functionName: "asset",
@@ -38,7 +38,7 @@ export class Erc4626 implements LiquidityVenue {
     }
 
     try {
-      const withdrawAmount = await readContract(encoder.client, {
+      const withdrawAmount = await readContractWithRpcStats(encoder.client, "liquidity_routing", {
         address: src,
         abi: erc4626Abi,
         functionName: "previewRedeem",

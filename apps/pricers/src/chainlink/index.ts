@@ -11,12 +11,12 @@ import {
   type Client,
   type Transport,
 } from "viem";
-import { readContract } from "viem/actions";
 import { mainnet } from "viem/chains";
 
 import { feedRegistryAbi } from "../abis/feedRegistry";
 import { createLogger, serializeError } from "../logger";
 import type { Pricer } from "../pricer";
+import { readContractWithRpcStats } from "../rpcActions";
 
 const logger = createLogger({ component: "chainlink-pricer" });
 
@@ -54,13 +54,13 @@ export class ChainlinkPricer implements Pricer {
     try {
       // Query price from Feed Registry
       const [roundData, decimals] = await Promise.all([
-        readContract(client, {
+        readContractWithRpcStats(client, "price_refresh", {
           address: FEED_REGISTRY_ADDRESS,
           abi: feedRegistryAbi,
           functionName: "latestRoundData",
           args: [asset, DENOMINATIONS.USD],
         }),
-        readContract(client, {
+        readContractWithRpcStats(client, "price_refresh", {
           address: FEED_REGISTRY_ADDRESS,
           abi: feedRegistryAbi,
           functionName: "decimals",

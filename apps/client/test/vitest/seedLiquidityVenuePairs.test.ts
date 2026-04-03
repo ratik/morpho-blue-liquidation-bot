@@ -57,7 +57,7 @@ describe("seedMarketDerivedCaches", () => {
       liquidityVenues: [venue],
       pricers: [{}],
       coveredMarkets: [marketA, marketB],
-      client: {},
+      client: { chain: { id: 8453 } },
       chainAddresses: { morpho: collateral },
       logger: { info: vi.fn(), error: vi.fn() },
       logTag: "[test] ",

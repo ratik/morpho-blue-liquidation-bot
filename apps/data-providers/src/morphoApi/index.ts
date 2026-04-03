@@ -3,10 +3,10 @@ import "@morpho-org/blue-sdk-viem/lib/augment";
 import { fetchMarket, metaMorphoAbi } from "@morpho-org/blue-sdk-viem";
 import { Time } from "@morpho-org/morpho-ts";
 import type { Account, Address, Chain, Client, Hex, Transport } from "viem";
-import { readContract } from "viem/actions";
 
 import type { DataProvider, LiquidatablePositionsResult } from "../dataProvider";
 import { createLogger, serializeError } from "../logger";
+import { readContractWithRpcStats } from "../rpcActions";
 
 import { apiSdk } from "./api/index";
 
@@ -153,7 +153,7 @@ export class MorphoApiDataProvider implements DataProvider {
     vaultAddress: Address,
   ): Promise<Hex[]> {
     try {
-      const withdrawQueueLength = await readContract(client, {
+      const withdrawQueueLength = await readContractWithRpcStats(client, "vault_market_fetch", {
         address: vaultAddress,
         abi: metaMorphoAbi,
         functionName: "withdrawQueueLength",
@@ -163,7 +163,7 @@ export class MorphoApiDataProvider implements DataProvider {
 
       return await Promise.all(
         indices.map(async (index) => {
-          const marketId = await readContract(client, {
+          const marketId = await readContractWithRpcStats(client, "vault_market_fetch", {
             address: vaultAddress,
             abi: metaMorphoAbi,
             functionName: "withdrawQueue",

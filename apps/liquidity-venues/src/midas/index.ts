@@ -2,10 +2,10 @@ import { midasConfigs } from "@morpho-blue-liquidation-bot/config";
 import { MathLib } from "@morpho-org/blue-sdk";
 import { type ExecutorEncoder } from "executooor-viem";
 import { type Address, encodeFunctionData, erc20Abi, getContract } from "viem";
-import { readContract } from "viem/actions";
 
 import { midasDataFeedAbi, redemptionVaultAbi } from "../abis/midas";
 import type { LiquidityVenue } from "../liquidityVenue";
+import { readContractWithRpcStats } from "../rpcActions";
 import type { ToConvert } from "../types";
 
 import { PreviewRedeemInstantParams } from "./types";
@@ -233,7 +233,7 @@ export class MidasVenue implements LiquidityVenue {
         midasContract.read.dailyLimits([BigInt(Math.floor(Date.now() / 1000 / (60 * 60 * 24)))]),
         midasContract.read.mTokenDataFeed(),
         midasContract.read.tokensConfig([tokenOut]),
-        readContract(encoder.client, {
+        readContractWithRpcStats(encoder.client, "liquidity_routing", {
           address: tokenOut,
           abi: erc20Abi,
           functionName: "decimals",
@@ -272,7 +272,7 @@ export class MidasVenue implements LiquidityVenue {
   }
 
   async getMidasRate(dataFeed: Address, encoder: ExecutorEncoder) {
-    return readContract(encoder.client, {
+    return readContractWithRpcStats(encoder.client, "liquidity_routing", {
       address: dataFeed,
       abi: midasDataFeedAbi,
       functionName: "getDataInBase18",

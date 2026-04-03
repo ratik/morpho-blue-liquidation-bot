@@ -6,10 +6,10 @@ import { GraphQLClient } from "graphql-request";
 import gql from "graphql-tag";
 import type { Account, Address, Chain, Client, Hex, Transport } from "viem";
 import { getAddress } from "viem";
-import { readContract } from "viem/actions";
 
 import type { DataProvider, LiquidatablePositionsResult } from "../dataProvider";
 import { createLogger, serializeError } from "../logger";
+import { readContractWithRpcStats } from "../rpcActions";
 
 const DEFAULT_HYPERINDEX_URL = "http://localhost:8080/v1/graphql";
 const HEALTH_CHECK_INTERVAL_MS = 500;
@@ -328,7 +328,7 @@ export class HyperIndexDataProvider implements DataProvider {
       await Promise.all(
         [...oracleAddresses].map(async (oracle) => {
           try {
-            const price = await readContract(client, {
+            const price = await readContractWithRpcStats(client, "misc_runtime_read", {
               address: oracle,
               abi: oracleAbi,
               functionName: "price",
