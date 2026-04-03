@@ -27,6 +27,8 @@ interface CachedPrice {
   fetchTimestamp: number;
 }
 
+type LatestRoundData = readonly [bigint, bigint, bigint, bigint, bigint];
+
 export class ChainlinkPricer implements Pricer {
   private readonly CACHE_TIMEOUT_MS = 30_000; // 30 seconds
 
@@ -53,7 +55,7 @@ export class ChainlinkPricer implements Pricer {
 
     try {
       // Query price from Feed Registry
-      const [roundData, decimals] = await Promise.all([
+      const [roundData, decimals] = (await Promise.all([
         readContractWithRpcStats(client, "price_refresh", {
           address: FEED_REGISTRY_ADDRESS,
           abi: feedRegistryAbi,
@@ -66,7 +68,7 @@ export class ChainlinkPricer implements Pricer {
           functionName: "decimals",
           args: [asset, DENOMINATIONS.USD],
         }),
-      ]);
+      ])) as [LatestRoundData, number];
 
       // Extract price from round data (answer is the price)
       const rawPrice = roundData[1];

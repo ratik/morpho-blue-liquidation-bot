@@ -23,6 +23,8 @@ import { readContractWithRpcStats } from "../rpcActions";
 
 const logger = createLogger({ component: "uniswapv3-pricer" });
 
+type Slot0 = readonly [bigint, number, number, number, number, number, boolean];
+
 export class UniswapV3Pricer implements Pricer {
   private pools: Record<Address, Record<Address, Address[]>> = {};
   private decimals: Record<Address, number> = {};
@@ -49,11 +51,11 @@ export class UniswapV3Pricer implements Pricer {
         pools.map(async (pool) => {
           return {
             pool,
-            amount: await readContractWithRpcStats(client, "price_refresh", {
+            amount: (await readContractWithRpcStats(client, "price_refresh", {
               address: pool,
               abi: uniswapV3PoolAbi,
               functionName: "liquidity",
-            }),
+            })) as bigint,
           };
         }),
       );
@@ -71,7 +73,7 @@ export class UniswapV3Pricer implements Pricer {
         fromHex(asset, "bigint") < fromHex(usdReference, "bigint") ? asset : usdReference;
       const token1 = token0 === asset ? usdReference : asset;
 
-      const [slot0, token0Decimals, token1Decimals] = await Promise.all([
+      const [slot0, token0Decimals, token1Decimals] = (await Promise.all([
         readContractWithRpcStats(client, "price_refresh", {
           address: biggestPool,
           abi: uniswapV3PoolAbi,
@@ -79,7 +81,7 @@ export class UniswapV3Pricer implements Pricer {
         }),
         this.getDecimals(client, token0),
         this.getDecimals(client, token1),
-      ]);
+      ])) as [Slot0, number, number];
 
       const sqrtPriceX96 = slot0[0];
       const price = Number(
@@ -120,7 +122,7 @@ export class UniswapV3Pricer implements Pricer {
             }),
           ),
         )
-      ).filter((pool) => pool !== zeroAddress);
+      ).filter((pool): pool is Address => (pool as Address) !== zeroAddress);
 
       if (this.pools[src]?.[dst] === undefined) {
         this.pools[src] = { ...this.pools[src], [dst]: newPools };
@@ -138,11 +140,11 @@ export class UniswapV3Pricer implements Pricer {
 
   private async getDecimals(client: Client<Transport, Chain, Account>, asset: Address) {
     if (this.decimals[asset] !== undefined) return this.decimals[asset];
-    const decimals = await readContractWithRpcStats(client, "price_refresh", {
+    const decimals = (await readContractWithRpcStats(client, "price_refresh", {
       address: asset,
       abi: erc20Abi,
       functionName: "decimals",
-    });
+    })) as number;
     this.decimals[asset] = decimals;
     return decimals;
   }
