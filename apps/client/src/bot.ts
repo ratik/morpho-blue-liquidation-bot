@@ -83,6 +83,8 @@ export class LiquidationBot {
   private flashbotAccount?: LocalAccount;
   private coveredMarkets: Hex[];
   private alwaysRealizeBadDebt: boolean;
+  private registeredPricedAssets: Set<Address>;
+  private priceCache: Map<Address, { price: number; updatedAt: number }>;
 
   constructor(inputs: LiquidationBotInputs) {
     this.logger = createLogger({
@@ -107,6 +109,8 @@ export class LiquidationBot {
     this.flashbotAccount = inputs.flashbotAccount;
     this.coveredMarkets = [];
     this.alwaysRealizeBadDebt = inputs.alwaysRealizeBadDebt;
+    this.registeredPricedAssets = new Set();
+    this.priceCache = new Map();
   }
 
   async run() {
@@ -124,26 +128,38 @@ export class LiquidationBot {
   async warmupData() {
     this.logger.info({}, `Warming up markets`);
     await this.fetchMarkets();
-    this.logger.info({}, `Warming up pricer caches`);
-    await this.refreshPricerCaches();
+    this.logger.info({}, `Warming up bot price cache`);
+    await this.refreshPriceCache();
     this.logger.info({}, `Warming completed`);
   }
 
-  async refreshPricerCaches() {
+  async refreshPriceCache() {
     if (this.pricers === undefined || this.pricers.length === 0) return;
 
-    await Promise.all(
-      this.pricers.map(async (pricer) => {
-        try {
-          await pricer.refreshRegisteredAssets?.(this.client);
-        } catch (error) {
-          this.logger.error(
-            { error: serializeError(error) },
-            `${this.logTag}Failed to refresh pricer cache`,
-          );
-        }
-      }),
-    );
+    for (const asset of this.registeredPricedAssets) {
+      const prices = (
+        await Promise.all(
+          this.pricers.map(async (pricer) => {
+            try {
+              return await pricer.price(this.client, asset);
+            } catch (error) {
+              this.logger.error(
+                { error: serializeError(error), asset },
+                `${this.logTag}Failed to fetch price from pricer`,
+              );
+              return undefined;
+            }
+          }),
+        )
+      ).filter((price): price is number => price !== undefined);
+
+      if (prices.length === 0) continue;
+
+      this.priceCache.set(asset, {
+        price: this.calculateMedian(prices),
+        updatedAt: Date.now(),
+      });
+    }
   }
 
   private async liquidate(position: AccrualPosition) {
@@ -455,16 +471,8 @@ export class LiquidationBot {
     return toConvert;
   }
 
-  private async price(asset: Address, amount: bigint, pricers: Pricer[]) {
-    let price: number | undefined = undefined;
-
-    for (const pricer of pricers) {
-      price =
-        pricer.getCachedPrice !== undefined
-          ? await pricer.getCachedPrice(this.client, asset)
-          : await pricer.price(this.client, asset);
-      if (price !== undefined) break;
-    }
+  private async price(asset: Address, amount: bigint, _pricers: Pricer[]) {
+    const price = this.priceCache.get(asset)?.price;
 
     if (price === undefined) return undefined;
 
@@ -561,13 +569,8 @@ export class LiquidationBot {
       ): venue is typeof venue & { registerTokenPair: (src: Address, dst: Address) => void } =>
         venue.registerTokenPair !== undefined,
     );
-    const assetAwarePricers =
-      this.pricers?.filter(
-        (pricer): pricer is typeof pricer & { registerAsset: (asset: Address) => void } =>
-          pricer.registerAsset !== undefined,
-      ) ?? [];
     if (
-      (pairAwareVenues.length === 0 && assetAwarePricers.length === 0) ||
+      (pairAwareVenues.length === 0 && this.pricers === undefined) ||
       this.coveredMarkets.length === 0
     )
       return;
@@ -585,7 +588,7 @@ export class LiquidationBot {
     );
 
     const pairKeys = new Set<string>();
-    const assetSet = new Set<Address>(assetAwarePricers.length > 0 ? [this.wNative] : []);
+    const assetSet = new Set<Address>(this.pricers !== undefined ? [this.wNative] : []);
     for (const result of results) {
       if (result.status === "rejected") {
         this.logger.error(
@@ -608,11 +611,7 @@ export class LiquidationBot {
       }
     }
 
-    for (const asset of assetSet) {
-      for (const pricer of assetAwarePricers) {
-        pricer.registerAsset(asset);
-      }
-    }
+    this.registeredPricedAssets = assetSet;
 
     if (pairAwareVenues.length > 0) {
       this.logger.info(
@@ -621,11 +620,24 @@ export class LiquidationBot {
       );
     }
 
-    if (assetAwarePricers.length > 0) {
+    if (this.pricers !== undefined) {
       this.logger.info(
         { seededAssets: assetSet.size, marketCount: uniqueMarketIds.length },
-        `${this.logTag}Seeded pricer assets from covered markets`,
+        `${this.logTag}Seeded bot price cache assets from covered markets`,
       );
     }
+  }
+
+  private calculateMedian(prices: number[]) {
+    const sortedPrices = [...prices].sort((a, b) => a - b);
+    const middle = Math.floor(sortedPrices.length / 2);
+
+    if (sortedPrices.length % 2 === 1) {
+      return sortedPrices[middle];
+    }
+
+    const left = sortedPrices[middle - 1]!;
+    const right = sortedPrices[middle]!;
+    return (left + right) / 2;
   }
 }

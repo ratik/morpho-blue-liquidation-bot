@@ -86,12 +86,6 @@ export const launchBot = async (config: ChainConfig, dataProvider: DataProvider)
     ? config.pricers.map((pricerName) => createPricer(pricerName))
     : undefined;
 
-  if (pricers) {
-    for (const pricer of pricers) {
-      await pricer.init?.(client);
-    }
-  }
-
   // FlASHBOTS
 
   let flashbotAccount = undefined;
@@ -146,13 +140,13 @@ export const launchBot = async (config: ChainConfig, dataProvider: DataProvider)
     `${logTag}Pricer refresh configured`,
   );
 
-  const refreshPricerCaches = async () => {
+  const refreshPriceCache = async () => {
     try {
-      await bot.refreshPricerCaches();
+      await bot.refreshPriceCache();
     } catch (error) {
       logger.error(
         { error: serializeError(error), logTag },
-        `${logTag}failed to refresh pricer caches`,
+        `${logTag}failed to refresh bot price cache`,
       );
     }
   };
@@ -160,7 +154,7 @@ export const launchBot = async (config: ChainConfig, dataProvider: DataProvider)
   const startPriceRefreshLoop = async () => {
     while (true) {
       await sleep(PRICE_REFRESH_INTERVAL_MS);
-      await refreshPricerCaches();
+      await refreshPriceCache();
     }
   };
 

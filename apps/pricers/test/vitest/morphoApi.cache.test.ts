@@ -7,7 +7,7 @@ import { MorphoApi } from "../../src";
 const asset = "0x0000000000000000000000000000000000000001" as Address;
 
 function createClient(chain: typeof mainnet | typeof base) {
-  return { chain } as Parameters<MorphoApi["refreshRegisteredAssets"]>[0];
+  return { chain } as Parameters<MorphoApi["price"]>[0];
 }
 
 function mockJsonResponse(body: unknown) {
@@ -27,7 +27,7 @@ describe("morpho api pricer cache", () => {
     vi.useRealTimers();
   });
 
-  it("refreshes registered assets and serves cached prices within TTL", async () => {
+  it("reuses cached prices within TTL", async () => {
     const fetchMock = vi
       .spyOn(globalThis, "fetch")
       .mockResolvedValueOnce(mockJsonResponse({ data: { chains: [{ id: mainnet.id }] } }))
@@ -39,15 +39,13 @@ describe("morpho api pricer cache", () => {
 
     const pricer = new MorphoApi();
     const client = createClient(mainnet);
-    pricer.registerAsset(asset);
 
-    await pricer.refreshRegisteredAssets(client);
-    expect(pricer.getCachedPrice(client, asset)).toBe(123.45);
-    expect(pricer.getCachedPrice(client, asset)).toBe(123.45);
+    expect(await pricer.price(client, asset)).toBe(123.45);
+    expect(await pricer.price(client, asset)).toBe(123.45);
     expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 
-  it("background refresh updates the cached price on the next cycle", async () => {
+  it("refreshes the cache after TTL expiry", async () => {
     const fetchMock = vi
       .spyOn(globalThis, "fetch")
       .mockResolvedValueOnce(mockJsonResponse({ data: { chains: [{ id: mainnet.id }] } }))
@@ -64,12 +62,10 @@ describe("morpho api pricer cache", () => {
 
     const pricer = new MorphoApi();
     const client = createClient(mainnet);
-    pricer.registerAsset(asset);
 
-    await pricer.refreshRegisteredAssets(client);
-    expect(pricer.getCachedPrice(client, asset)).toBe(100);
-    await pricer.refreshRegisteredAssets(client);
-    expect(pricer.getCachedPrice(client, asset)).toBe(200);
+    expect(await pricer.price(client, asset)).toBe(100);
+    vi.advanceTimersByTime(30_001);
+    expect(await pricer.price(client, asset)).toBe(200);
     expect(fetchMock).toHaveBeenCalledTimes(3);
   });
 
@@ -85,11 +81,9 @@ describe("morpho api pricer cache", () => {
 
     const pricer = new MorphoApi();
     const client = createClient(mainnet);
-    pricer.registerAsset(asset);
 
-    await pricer.refreshRegisteredAssets(client);
-    expect(pricer.getCachedPrice(client, asset)).toBeUndefined();
-    expect(pricer.getCachedPrice(client, asset)).toBeUndefined();
+    expect(await pricer.price(client, asset)).toBeUndefined();
+    expect(await pricer.price(client, asset)).toBeUndefined();
     expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 
@@ -113,33 +107,18 @@ describe("morpho api pricer cache", () => {
       );
 
     const pricer = new MorphoApi();
-    pricer.registerAsset(asset);
 
-    await pricer.refreshRegisteredAssets(createClient(mainnet));
-    await pricer.refreshRegisteredAssets(createClient(base));
-    expect(pricer.getCachedPrice(createClient(mainnet), asset)).toBe(100);
-    expect(pricer.getCachedPrice(createClient(base), asset)).toBe(200);
+    expect(await pricer.price(createClient(mainnet), asset)).toBe(100);
+    expect(await pricer.price(createClient(base), asset)).toBe(200);
     expect(fetchMock).toHaveBeenCalledTimes(3);
   });
 
-  it("preserves a previous cached value when refresh fails", async () => {
+  it("returns undefined when fetch fails without a cached value", async () => {
     vi.spyOn(globalThis, "fetch")
       .mockResolvedValueOnce(mockJsonResponse({ data: { chains: [{ id: mainnet.id }] } }))
-      .mockResolvedValueOnce(
-        mockJsonResponse({
-          data: { assets: { items: [{ address: asset, priceUsd: 100 }] } },
-        }),
-      )
       .mockRejectedValueOnce(new Error("boom"));
 
     const pricer = new MorphoApi();
-    const client = createClient(mainnet);
-    pricer.registerAsset(asset);
-
-    await pricer.refreshRegisteredAssets(client);
-    expect(pricer.getCachedPrice(client, asset)).toBe(100);
-    await pricer.refreshRegisteredAssets(client);
-    expect(pricer.getCachedPrice(client, asset)).toBe(100);
-    await expect(pricer.price(client, asset)).resolves.toBe(100);
+    await expect(pricer.price(createClient(mainnet), asset)).resolves.toBeUndefined();
   });
 });

@@ -7,8 +7,8 @@ const {
   httpMock,
   privateKeyToAccountMock,
   liquidatonBotRunMock,
-  liquidatonBotWarmupPricingMock,
-  liquidatonBotRefreshPricerCachesMock,
+  liquidatonBotWarmupDataMock,
+  liquidatonBotRefreshPriceCacheMock,
 } = vi.hoisted(() => ({
   createWalletClientMock: vi.fn(),
   httpMock: vi.fn((url: string) => ({ url })),
@@ -16,8 +16,8 @@ const {
     address: "0x0000000000000000000000000000000000000002",
   })),
   liquidatonBotRunMock: vi.fn(),
-  liquidatonBotWarmupPricingMock: vi.fn(),
-  liquidatonBotRefreshPricerCachesMock: vi.fn(),
+  liquidatonBotWarmupDataMock: vi.fn(),
+  liquidatonBotRefreshPriceCacheMock: vi.fn(),
 }));
 
 let lastBotInputs: unknown;
@@ -42,8 +42,8 @@ vi.mock("../../src/bot.js", () => ({
     }
 
     run = liquidatonBotRunMock;
-    warmupData = liquidatonBotWarmupPricingMock;
-    refreshPricerCaches = liquidatonBotRefreshPricerCachesMock;
+    warmupData = liquidatonBotWarmupDataMock;
+    refreshPriceCache = liquidatonBotRefreshPriceCacheMock;
   },
 }));
 
@@ -78,8 +78,8 @@ describe("launchBot simulation client", () => {
     httpMock.mockClear();
     privateKeyToAccountMock.mockClear();
     liquidatonBotRunMock.mockReset();
-    liquidatonBotWarmupPricingMock.mockReset();
-    liquidatonBotRefreshPricerCachesMock.mockReset();
+    liquidatonBotWarmupDataMock.mockReset();
+    liquidatonBotRefreshPriceCacheMock.mockReset();
     vi.useFakeTimers();
 
     createWalletClientMock
@@ -98,7 +98,7 @@ describe("launchBot simulation client", () => {
   });
 
   it("creates a separate simulation client when simulationRpcUrl is configured", async () => {
-    liquidatonBotWarmupPricingMock.mockResolvedValue(undefined);
+    liquidatonBotWarmupDataMock.mockResolvedValue(undefined);
     liquidatonBotRunMock.mockResolvedValue(undefined);
 
     await launchBot(createConfig(), {} as never);
@@ -106,14 +106,14 @@ describe("launchBot simulation client", () => {
     expect(httpMock).toHaveBeenNthCalledWith(1, "https://main-rpc.example");
     expect(httpMock).toHaveBeenNthCalledWith(2, "https://simulation-rpc.example");
     expect(createWalletClientMock).toHaveBeenCalledTimes(2);
-    expect(liquidatonBotWarmupPricingMock).toHaveBeenCalledTimes(1);
+    expect(liquidatonBotWarmupDataMock).toHaveBeenCalledTimes(1);
     expect((lastBotInputs as { client: object; simulationClient: object }).client).not.toBe(
       (lastBotInputs as { client: object; simulationClient: object }).simulationClient,
     );
   });
 
   it("falls back to the main RPC when simulationRpcUrl is unset", async () => {
-    liquidatonBotWarmupPricingMock.mockResolvedValue(undefined);
+    liquidatonBotWarmupDataMock.mockResolvedValue(undefined);
     liquidatonBotRunMock.mockResolvedValue(undefined);
 
     await launchBot(createConfig({ simulationRpcUrl: undefined }), {} as never);
@@ -124,7 +124,7 @@ describe("launchBot simulation client", () => {
   });
 
   it("runs immediately on startup and schedules the next polling iteration", async () => {
-    liquidatonBotWarmupPricingMock.mockResolvedValue(undefined);
+    liquidatonBotWarmupDataMock.mockResolvedValue(undefined);
     liquidatonBotRunMock.mockResolvedValue(undefined);
 
     await launchBot(createConfig({ pollingIntervalMs: 50 }), {} as never);
@@ -135,7 +135,7 @@ describe("launchBot simulation client", () => {
   });
 
   it("does not start overlapping runs when a tick lands during an active run", async () => {
-    liquidatonBotWarmupPricingMock.mockResolvedValue(undefined);
+    liquidatonBotWarmupDataMock.mockResolvedValue(undefined);
     liquidatonBotRunMock.mockImplementation(
       () =>
         new Promise<void>(() => {
@@ -152,7 +152,7 @@ describe("launchBot simulation client", () => {
 
   it("waits for warmup before starting polling", async () => {
     let resolveWarmup: (() => void) | undefined;
-    liquidatonBotWarmupPricingMock.mockImplementation(
+    liquidatonBotWarmupDataMock.mockImplementation(
       () =>
         new Promise<void>((resolve) => {
           resolveWarmup = resolve;
