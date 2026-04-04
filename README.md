@@ -54,8 +54,6 @@ For each chain, here are the parameters that need to be configured:
 
 ### Options
 
-- `options.dataProvider`: The [data provider](./apps/data-providers/README.md) to use for fetching market and position data. Currently supported: `"morphoApi"`.
-
 - `options.vaultWhitelist`: List of MetaMorpho vault addresses. All the markets listed by those vaults will be whitelisted. Can also be set to `"morpho-api"` to dynamically resolve whitelisted vaults.
 
 - `options.additionalMarketsWhitelist`: List of market IDs to whitelist (even if they are not listed by any vault).

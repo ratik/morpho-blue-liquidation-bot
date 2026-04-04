@@ -1,12 +1,5 @@
-import {
-  chainConfigs,
-  chainConfig,
-  type DataProviderName,
-} from "@morpho-blue-liquidation-bot/config";
-import {
-  createDataProviders,
-  type DataProvider,
-} from "@morpho-blue-liquidation-bot/data-providers";
+import { chainConfigs, chainConfig } from "@morpho-blue-liquidation-bot/config";
+import { createDataProviders } from "@morpho-blue-liquidation-bot/data-providers";
 
 import { startHealthServer } from "./health";
 import { createLogger, serializeError } from "./logger";
@@ -34,22 +27,7 @@ async function run() {
     })
     .filter((config) => config !== undefined);
 
-  // Group chains by data provider name
-  const chainsByProvider = new Map<DataProviderName, number[]>();
-  for (const config of configs) {
-    const existing = chainsByProvider.get(config.dataProvider) ?? [];
-    existing.push(config.chainId);
-    chainsByProvider.set(config.dataProvider, existing);
-  }
-
-  // Create data providers (one per provider type, shared across chains)
-  const providersByChain = new Map<number, DataProvider>();
-  for (const [providerName, chainIds] of chainsByProvider) {
-    const providers = await createDataProviders(providerName, chainIds);
-    for (const [chainId, provider] of providers) {
-      providersByChain.set(chainId, provider);
-    }
-  }
+  const providersByChain = await createDataProviders(configs.map((config) => config.chainId));
 
   try {
     await startHealthServer();

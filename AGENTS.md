@@ -70,12 +70,11 @@ Workspace monorepo with five packages:
 ## How to Add a New Data Provider
 
 1. **Config** (`apps/config`):
-   - Add the data provider name to the `DataProviderName` union type in `apps/config/src/types.ts`
-   - Set the data provider name in the relevant chain configs in `apps/config/src/config.ts` via `options.dataProvider`
+   - No chain-level config field is needed while there is only one provider
 
 2. **Data Providers** (`apps/data-providers`):
    - Create `apps/data-providers/src/<providerName>/index.ts` implementing the `DataProvider` interface
-   - Register it in the factory switch in `apps/data-providers/src/factory.ts`
+   - Register it in the bootstrap/factory path in `apps/data-providers/src/factory.ts`
    - Export it from `apps/data-providers/src/index.ts`
 
 3. **Tests**:

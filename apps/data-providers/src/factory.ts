@@ -1,5 +1,3 @@
-import type { DataProviderName } from "@morpho-blue-liquidation-bot/config";
-
 import type { DataProvider } from "./dataProvider";
 import { MorphoApiDataProvider } from "./morphoApi";
 
@@ -8,19 +6,8 @@ import { MorphoApiDataProvider } from "./morphoApi";
  * Returns a Map from chainId to DataProvider.
  * Multi-chain providers share a single instance across all chains.
  */
-export async function createDataProviders(
-  dataProviderName: DataProviderName,
-  chainIds: number[],
-): Promise<Map<number, DataProvider>> {
-  let provider: DataProvider;
-
-  switch (dataProviderName) {
-    case "morphoApi":
-      provider = new MorphoApiDataProvider();
-      break;
-    default:
-      throw new Error(`Unknown data provider: ${dataProviderName}`);
-  }
+export async function createDataProviders(chainIds: number[]): Promise<Map<number, DataProvider>> {
+  const provider: DataProvider = new MorphoApiDataProvider();
 
   if (provider.init) {
     await provider.init();

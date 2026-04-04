@@ -25,7 +25,6 @@ Set the data provider in `apps/config/src/config.ts`:
 ```typescript
 [mainnet.id]: {
   options: {
-    dataProvider: "morphoApi",
     // ...
   },
 },
@@ -33,8 +32,6 @@ Set the data provider in `apps/config/src/config.ts`:
 
 ## Adding a New Data Provider
 
-1. Add the data provider name to the `DataProviderName` type in `apps/config/src/types.ts`.
-2. Create a new folder in `src/` with an `index.ts` implementing the `DataProvider` interface.
-3. Register it in the factory switch in `src/factory.ts`.
-4. Export it from `src/index.ts`.
-5. Set `options.dataProvider` in the relevant chain configs in `apps/config/src/config.ts`.
+1. Create a new folder in `src/` with an `index.ts` implementing the `DataProvider` interface.
+2. Register it in the bootstrap/factory path in `src/factory.ts`.
+3. Export it from `src/index.ts`.

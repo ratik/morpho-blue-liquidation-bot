@@ -66,7 +66,6 @@ function createConfig(overrides: Partial<ChainConfig> = {}): ChainConfig {
     treasuryAddress: undefined,
     liquidationBufferBps: undefined,
     pollingIntervalMs: 10_000,
-    dataProvider: "morphoApi",
     executorAddress: "0x0000000000000000000000000000000000000004",
     liquidationPrivateKey: "0x1111111111111111111111111111111111111111111111111111111111111111",
     ...overrides,
