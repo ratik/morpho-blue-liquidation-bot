@@ -1,13 +1,12 @@
 import type { DataProviderName } from "@morpho-blue-liquidation-bot/config";
 
 import type { DataProvider } from "./dataProvider";
-import { HyperIndexDataProvider } from "./hyperIndex";
 import { MorphoApiDataProvider } from "./morphoApi";
 
 /**
  * Creates data providers for the given chains.
  * Returns a Map from chainId to DataProvider.
- * Multi-chain providers (morphoApi, hyperIndex) share a single instance across all chains.
+ * Multi-chain providers share a single instance across all chains.
  */
 export async function createDataProviders(
   dataProviderName: DataProviderName,
@@ -18,9 +17,6 @@ export async function createDataProviders(
   switch (dataProviderName) {
     case "morphoApi":
       provider = new MorphoApiDataProvider();
-      break;
-    case "hyperIndex":
-      provider = new HyperIndexDataProvider();
       break;
     default:
       throw new Error(`Unknown data provider: ${dataProviderName}`);

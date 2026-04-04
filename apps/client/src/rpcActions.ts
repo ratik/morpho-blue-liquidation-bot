@@ -11,6 +11,13 @@ import { type RpcStatsBucket, recordRpcStat } from "./rpcStats";
 
 type RpcClient = Client<Transport, Chain, Account>;
 
+function recordRpcStatIfPossible(client: RpcClient, bucket: RpcStatsBucket, failed: boolean) {
+  const chainId = client.chain?.id;
+  if (chainId !== undefined) {
+    recordRpcStat(chainId, bucket, failed);
+  }
+}
+
 export async function readContractWithRpcStats(
   client: RpcClient,
   bucket: RpcStatsBucket,
@@ -18,10 +25,10 @@ export async function readContractWithRpcStats(
 ) {
   try {
     const result = await readContract(client, parameters);
-    recordRpcStat(client.chain.id, bucket, false);
+    recordRpcStatIfPossible(client, bucket, false);
     return result;
   } catch (error) {
-    recordRpcStat(client.chain.id, bucket, true);
+    recordRpcStatIfPossible(client, bucket, true);
     throw error;
   }
 }
@@ -33,10 +40,10 @@ export async function simulateCallsWithRpcStats(
 ) {
   try {
     const result = await simulateCalls(client, parameters);
-    recordRpcStat(client.chain.id, bucket, false);
+    recordRpcStatIfPossible(client, bucket, false);
     return result;
   } catch (error) {
-    recordRpcStat(client.chain.id, bucket, true);
+    recordRpcStatIfPossible(client, bucket, true);
     throw error;
   }
 }
@@ -44,10 +51,10 @@ export async function simulateCallsWithRpcStats(
 export async function getGasPriceWithRpcStats(client: RpcClient, bucket: RpcStatsBucket) {
   try {
     const result = await getGasPrice(client);
-    recordRpcStat(client.chain.id, bucket, false);
+    recordRpcStatIfPossible(client, bucket, false);
     return result;
   } catch (error) {
-    recordRpcStat(client.chain.id, bucket, true);
+    recordRpcStatIfPossible(client, bucket, true);
     throw error;
   }
 }
@@ -55,10 +62,10 @@ export async function getGasPriceWithRpcStats(client: RpcClient, bucket: RpcStat
 export async function getBlockNumberWithRpcStats(client: RpcClient, bucket: RpcStatsBucket) {
   try {
     const result = await getBlockNumber(client);
-    recordRpcStat(client.chain.id, bucket, false);
+    recordRpcStatIfPossible(client, bucket, false);
     return result;
   } catch (error) {
-    recordRpcStat(client.chain.id, bucket, true);
+    recordRpcStatIfPossible(client, bucket, true);
     throw error;
   }
 }
@@ -70,10 +77,10 @@ export async function writeContractWithRpcStats(
 ) {
   try {
     const result = await writeContract(client, parameters);
-    recordRpcStat(client.chain.id, bucket, false);
+    recordRpcStatIfPossible(client, bucket, false);
     return result;
   } catch (error) {
-    recordRpcStat(client.chain.id, bucket, true);
+    recordRpcStatIfPossible(client, bucket, true);
     throw error;
   }
 }

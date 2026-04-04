@@ -4,12 +4,11 @@ Multi-chain liquidation bot for the Morpho Blue lending protocol. Monitors posit
 
 ## Architecture
 
-Workspace monorepo with six packages:
+Workspace monorepo with five packages:
 
 - **`apps/config`** — Chain configurations, venue/pricer/data-provider registrations, and all tunable parameters. Single source of truth for what the bot does and how.
 - **`apps/client`** — Bot orchestration logic and on-chain execution. Contains no configuration or secrets — everything is injected from config.
-- **`apps/data-providers`** — Data provider interface and implementations (MorphoApi, HyperIndex) for fetching market and position data.
-- **`apps/hyperindex`** — Envio HyperIndex indexer package. Standalone service that indexes Morpho on-chain events. Used by the HyperIndex data provider.
+- **`apps/data-providers`** — Data provider interface and implementations for fetching market and position data.
 - **`apps/liquidity-venues`** — Liquidity venue interface and implementations for converting collateral to loan tokens.
 - **`apps/pricers`** — Pricer interface and implementations for pricing assets in USD.
 
@@ -25,7 +24,7 @@ Workspace monorepo with six packages:
 ### Flow
 
 1. Config defines which chains, data provider, vaults, venues, and pricers to use
-2. `script.ts` reads all chain configs, groups chains by data provider, creates shared providers (awaiting `init()` for backfill), then launches one bot per chain
+2. `script.ts` reads all chain configs, groups chains by data provider, creates shared providers, then launches one bot per chain
 3. Each bot uses its data provider to fetch whitelisted markets and find liquidatable positions
 4. For each position: try liquidity venues in order to convert collateral → loan token
 5. Simulate the full liquidation, check profitability via pricers
@@ -124,8 +123,7 @@ Workspace monorepo with six packages:
 2. Add a new entry to `chainConfigs` in `apps/config/src/config.ts` with:
    - `chain` — the viem Chain object
    - `wNative` — wrapped native token address
-   - `options` — vault whitelist, liquidity venues (ordered), pricers (ordered), buffer, flashbots toggle, block interval
-   - `watchBlocksRetryDelayMs` — delay in ms before restarting the block watcher after an RPC error (default: 5000)
+   - `options` — vault whitelist, liquidity venues (ordered), pricers (ordered), buffer, flashbots toggle, polling interval
 3. Set up environment variables: `RPC_URL_<chainId>`, `EXECUTOR_ADDRESS_<chainId>`, `LIQUIDATION_PRIVATE_KEY_<chainId>`
 4. Deploy the executor contract on the new chain via `pnpm deploy:executor`
 
