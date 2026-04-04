@@ -28,7 +28,6 @@ export interface Options {
   pricers?: PricerName[];
   treasuryAddress?: Address;
   liquidationBufferBps?: number;
-  useFlashbots: boolean;
   pollingIntervalMs?: number;
 }
 

@@ -66,8 +66,6 @@ For each chain, here are the parameters that need to be configured:
 
 - `options.treasuryAddress` (optional): Address to receive liquidation profits. Defaults to the bot's EOA.
 
-- `options.useFlashbots`: Set to `true` to use Flashbots (requires `FLASHBOTS_PRIVATE_KEY` env var).
-
 - `options.liquidationBufferBps` (optional): Buffer in basis points to reduce seizable collateral, protecting against price movements before execution. Default: 10 bps. Not applied when realizing bad debt.
 
 - `options.pollingIntervalMs` (optional): Delay in milliseconds between liquidation checks. The next cycle starts after the previous one finishes and the interval elapses.
@@ -79,8 +77,6 @@ Secrets are set in the `.env` file at the root of the repository, with the follo
 - `RPC_URL_<chainId>` — RPC URL for the chain.
 - `EXECUTOR_ADDRESS_<chainId>` — Address of the deployed executor contract.
 - `LIQUIDATION_PRIVATE_KEY_<chainId>` — Private key of the EOA.
-- `FLASHBOTS_PRIVATE_KEY` (optional) — Flashbots private key, only if using Flashbots.
-
 Example for mainnet (chainId 1):
 
 ```

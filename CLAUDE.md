@@ -28,7 +28,7 @@ Workspace monorepo with five packages:
 3. Each bot uses its data provider to fetch whitelisted markets and find liquidatable positions
 4. For each position: try liquidity venues in order to convert collateral → loan token
 5. Simulate the full liquidation, check profitability via pricers
-6. Execute (optionally via Flashbots on mainnet)
+6. Execute transactions on-chain
 
 ## Non-Negotiables
 
@@ -123,7 +123,7 @@ Workspace monorepo with five packages:
 2. Add a new entry to `chainConfigs` in `apps/config/src/config.ts` with:
    - `chain` — the viem Chain object
    - `wNative` — wrapped native token address
-   - `options` — vault whitelist, liquidity venues (ordered), pricers (ordered), buffer, flashbots toggle, block interval
+   - `options` — vault whitelist, liquidity venues (ordered), pricers (ordered), buffer, polling interval
    - `watchBlocksRetryDelayMs` — delay in ms before restarting the block watcher after an RPC error (default: 5000)
 3. Set up environment variables: `RPC_URL_<chainId>`, `EXECUTOR_ADDRESS_<chainId>`, `LIQUIDATION_PRIVATE_KEY_<chainId>`
 4. Deploy the executor contract on the new chain via `pnpm deploy:executor`

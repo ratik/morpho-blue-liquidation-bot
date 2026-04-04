@@ -65,7 +65,6 @@ function createConfig(overrides: Partial<ChainConfig> = {}): ChainConfig {
     pricers: undefined,
     treasuryAddress: undefined,
     liquidationBufferBps: undefined,
-    useFlashbots: false,
     pollingIntervalMs: 10_000,
     dataProvider: "morphoApi",
     executorAddress: "0x0000000000000000000000000000000000000004",

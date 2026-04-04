@@ -26,7 +26,6 @@ import { LiquidationBot } from "../../src/bot.js";
 interface HandleTxContext {
   client: { account: { address: Address } };
   simulationClient: { account: { address: Address } };
-  flashbotAccount?: undefined;
   logTag: string;
   checkProfit: () => Promise<boolean>;
   logger: { error: ReturnType<typeof vi.fn> };

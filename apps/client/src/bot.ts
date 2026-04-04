@@ -15,7 +15,6 @@ import {
   erc20Abi,
   formatUnits,
   getAddress,
-  LocalAccount,
   maxUint256,
   parseUnits,
   type Account,
@@ -29,7 +28,6 @@ import {
 import { morphoBlueAbi } from "./abis/morpho/morphoBlue";
 import { createLogger, type AppLogger, serializeError } from "./logger";
 import {
-  getBlockNumberWithRpcStats,
   getGasPriceWithRpcStats,
   readContractWithRpcStats,
   simulateCallsWithRpcStats,
@@ -40,7 +38,6 @@ import {
   PositionLiquidationCooldownMechanism,
 } from "./utils/cooldownMechanisms.js";
 import { fetchWhitelistedVaults } from "./utils/fetch-whitelisted-vaults.js";
-import { Flashbots } from "./utils/flashbots.js";
 import { LiquidationEncoder } from "./utils/LiquidationEncoder.js";
 import { DEFAULT_LIQUIDATION_BUFFER_BPS, WAD, wMulDown } from "./utils/maths.js";
 
@@ -60,7 +57,6 @@ export interface LiquidationBotInputs {
   pricers?: Pricer[];
   positionLiquidationCooldownMechanism?: PositionLiquidationCooldownMechanism;
   marketsFetchingCooldownMechanism: MarketsFetchingCooldownMechanism;
-  flashbotAccount?: LocalAccount;
 }
 
 export class LiquidationBot {
@@ -80,7 +76,6 @@ export class LiquidationBot {
   private pricers?: Pricer[];
   private positionLiquidationCooldownMechanism?: PositionLiquidationCooldownMechanism;
   private marketsFetchingCooldownMechanism: MarketsFetchingCooldownMechanism;
-  private flashbotAccount?: LocalAccount;
   private coveredMarkets: Hex[];
   private alwaysRealizeBadDebt: boolean;
   private registeredPricedAssets: Set<Address>;
@@ -107,7 +102,6 @@ export class LiquidationBot {
     this.pricers = inputs.pricers;
     this.positionLiquidationCooldownMechanism = inputs.positionLiquidationCooldownMechanism;
     this.marketsFetchingCooldownMechanism = inputs.marketsFetchingCooldownMechanism;
-    this.flashbotAccount = inputs.flashbotAccount;
     this.coveredMarkets = [];
     this.alwaysRealizeBadDebt = inputs.alwaysRealizeBadDebt;
     this.registeredPricedAssets = new Set();
@@ -387,28 +381,10 @@ export class LiquidationBot {
     )
       return false;
 
-    // TX EXECUTION
-
-    if (this.flashbotAccount) {
-      const signedBundle = await Flashbots.signBundle([
-        {
-          transaction: { to: encoder.address, ...functionData },
-          client: this.client,
-        },
-      ]);
-
-      await Flashbots.sendRawBundle(
-        signedBundle,
-        (await getBlockNumberWithRpcStats(this.client, "block_number")) + 1n,
-        this.flashbotAccount,
-      );
-      return true;
-    } else {
-      await writeContractWithRpcStats(this.client, "tx_submit", {
-        address: encoder.address,
-        ...functionData,
-      });
-    }
+    await writeContractWithRpcStats(this.client, "tx_submit", {
+      address: encoder.address,
+      ...functionData,
+    });
 
     return true;
   }

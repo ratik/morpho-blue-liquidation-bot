@@ -8,7 +8,7 @@ import {
 import type { DataProvider } from "@morpho-blue-liquidation-bot/data-providers";
 import { createLiquidityVenue } from "@morpho-blue-liquidation-bot/liquidity-venues";
 import { createPricer } from "@morpho-blue-liquidation-bot/pricers";
-import { createWalletClient, Hex, http } from "viem";
+import { createWalletClient, http } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
 
 import { LiquidationBot, type LiquidationBotInputs } from "./bot";
@@ -97,20 +97,6 @@ export const launchBot = async (config: ChainConfig, dataProvider: DataProvider)
   const pricers = config.pricers
     ? config.pricers.map((pricerName) => createPricer(pricerName))
     : undefined;
-
-  // FlASHBOTS
-
-  let flashbotAccount = undefined;
-  if (config.useFlashbots) {
-    const flashbotsPrivateKey = process.env.FLASHBOTS_PRIVATE_KEY;
-
-    if (flashbotsPrivateKey === undefined) {
-      throw new Error(`${logTag} FLASHBOTS_PRIVATE_KEY is not set`);
-    }
-
-    flashbotAccount = privateKeyToAccount(process.env.FLASHBOTS_PRIVATE_KEY as Hex);
-  }
-
   let positionLiquidationCooldownMechanism = undefined;
   if (POSITION_LIQUIDATION_COOLDOWN_ENABLED) {
     positionLiquidationCooldownMechanism = new PositionLiquidationCooldownMechanism(
@@ -137,7 +123,6 @@ export const launchBot = async (config: ChainConfig, dataProvider: DataProvider)
     pricers,
     marketsFetchingCooldownMechanism,
     positionLiquidationCooldownMechanism,
-    flashbotAccount,
     alwaysRealizeBadDebt: ALWAYS_REALIZE_BAD_DEBT,
   };
 
